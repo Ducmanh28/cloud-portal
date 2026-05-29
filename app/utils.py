@@ -87,7 +87,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 def require_admin(current_user: models.User = Depends(get_current_user)):
     """Bắt buộc User phải có Role là ADMIN"""
-    if not current_user.role or current_user.role.name != "ADMIN":
+    if not current_user.role or current_user.role.name.upper() != "ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cảnh báo: Bạn không có quyền Quản trị viên để thực hiện thao tác này."

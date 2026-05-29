@@ -26,7 +26,7 @@ def get_customers(
     current_user: models.User = Depends(utils.get_current_user)
 ):
     """[ADMIN] Xem toàn bộ khách hàng. [USER] Chỉ xem thông tin của công ty mình."""
-    if current_user.role and current_user.role.name == "ADMIN":
+    if current_user.role and current_user.role.name.upper() == "ADMIN":
         return db.query(models.Customer).all()
     
     if not current_user.customer_id:
@@ -66,7 +66,7 @@ def get_customer_contracts(
     current_user: models.User = Depends(utils.get_current_user)
 ):
     """[ADMIN] Xem hợp đồng bất kỳ. [USER] Chỉ xem hợp đồng của công ty mình."""
-    if current_user.role.name != "ADMIN" and current_user.customer_id != customer_id:
+    if current_user.role.name.upper() != "ADMIN" and current_user.customer_id != customer_id:
         raise HTTPException(status_code=403, detail="Bạn không được phép xem hợp đồng của khách hàng khác.")
 
     return db.query(models.Contract).filter(models.Contract.customer_id == customer_id).all()
