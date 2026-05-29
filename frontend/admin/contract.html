@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Hợp đồng - Suncloud Admin Portal</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        body { padding-top: var(--navbar-height); }
+        .table-custom th { background-color: #f8f9fa; color: #495057; font-weight: 600; border-bottom: 2px solid #dee2e6; }
+        .action-btn { font-size: 0.85rem; padding: 0.25rem 0.5rem; }
+        .search-box { max-width: 350px; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top navbar-custom shadow-sm">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="dashboard.html">
+                <i class="bi bi-hdd-network-fill fs-4 me-2 text-primary"></i> Suncloud Admin Portal
+            </a>
+            <div class="ms-auto d-flex align-items-center text-white">
+                <div class="me-3 text-end d-none d-sm-block">
+                    <div id="nav-username" class="fw-semibold">Đang tải...</div>
+                    <small id="nav-role" class="text-white-50 text-uppercase" style="font-size: 0.75rem;"></small>
+                </div>
+                <button onclick="window.logout()" class="btn btn-outline-light btn-sm fw-semibold px-3">
+                    <i class="bi bi-box-arrow-right me-1"></i> Đăng xuất
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+        <div class="sidebar sidebar-light">
+            <a href="dashboard.html"><i class="bi bi-speedometer2 me-2"></i> Tổng quan HT</a>
+            <a href="users.html"><i class="bi bi-people me-2"></i> Quản lý Người dùng</a>
+            <a href="my-vms.html"><i class="bi bi-pc-display me-2"></i> Quản lý Máy ảo</a>
+            <a href="dcim.html"><i class="bi bi-server me-2"></i> Hạ tầng Vật lý (DCIM)</a>
+            <a href="ipam.html"><i class="bi bi-diagram-3 me-2"></i> Quản lý Mạng (IPAM)</a>
+            <a href="billing.html"><i class="bi bi-building me-2"></i> Doanh nghiệp (Tenant)</a>
+            <a href="contract.html" class="active"><i class="bi bi-file-earmark-text me-2"></i> Quản lý Hợp đồng</a>
+        </div>
+
+        <main class="main-content">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h4 class="fw-bold text-dark mb-1">Quản lý Hợp đồng Dịch vụ</h4>
+                    <p class="text-secondary small mb-0">Theo dõi, tìm kiếm và quản lý vòng đời hợp đồng của tất cả Khách hàng (Tenants).</p>
+                </div>
+                <div>
+                    <button onclick="mockAction('Tạo Hợp đồng mới', 'Mở form tạo lập hợp đồng và liên kết Tenant.')" class="btn btn-success btn-sm fw-semibold me-2">
+                        <i class="bi bi-plus-lg me-1"></i> Thêm Hợp đồng
+                    </button>
+                    <button onclick="loadContracts()" class="btn btn-primary btn-sm fw-semibold">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Làm mới
+                    </button>
+                </div>
+            </div>
+
+            <div id="action-alert" class="alert d-none py-2 shadow-sm border" role="alert"></div>
+
+            <div class="card card-custom shadow-sm border-0 mb-4">
+                <div class="card-body py-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <div class="input-group search-box">
+                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" id="searchInput" class="form-control border-start-0 ps-0" placeholder="Tìm theo Mã HĐ hoặc Tên khách hàng..." onkeyup="filterContracts()">
+                    </div>
+                    
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="small fw-semibold text-secondary">Trạng thái:</span>
+                        <select id="statusFilter" class="form-select form-select-sm" style="width: 150px;" onchange="filterContracts()">
+                            <option value="ALL">Tất cả</option>
+                            <option value="ACTIVE">Đang hiệu lực</option>
+                            <option value="PENDING">Chờ duyệt</option>
+                            <option value="EXPIRED">Đã hết hạn</option>
+                            <option value="CANCELED">Đã hủy</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card card-custom shadow-sm border-0">
+                <div class="card-body p-0 table-responsive">
+                    <table class="table table-hover table-middle mb-0 table-custom">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 60px;">ID</th>
+                                <th>Mã Hợp đồng</th>
+                                <th>Khách hàng (Tenant)</th>
+                                <th>Loại dịch vụ</th>
+                                <th>Thời hạn</th>
+                                <th>Giá trị (VND)</th>
+                                <th>Trạng thái</th>
+                                <th class="text-center" style="width: 180px;">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="contracts-tbody">
+                            <tr><td colspan="8" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải dữ liệu...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal fade" id="contractDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-light border-bottom-0 pt-4 px-4">
+                    <h5 class="modal-title fw-bold text-dark"><i class="bi bi-file-earmark-text me-2 text-primary"></i>Chi tiết Hợp đồng <span id="modalContractCode" class="text-secondary"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body px-4 pb-4">
+                    <div id="modalLoading" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang truy xuất thông tin...</div>
+                    
+                    <div id="modalContent" class="d-none">
+                        <div class="row g-4">
+                            <div class="col-md-6 border-end">
+                                <h6 class="fw-bold text-secondary text-uppercase small mb-3 border-bottom pb-2">Bên Thuê Dịch Vụ</h6>
+                                <p class="mb-2"><span class="text-muted small">Tên Doanh nghiệp:</span> <span class="fw-bold text-dark ms-1" id="detailCustomerName">--</span></p>
+                                <p class="mb-2"><span class="text-muted small">Mã số thuế:</span> <span class="fw-semibold ms-1" id="detailTaxCode">--</span></p>
+                                <p class="mb-2"><span class="text-muted small">Mã Tenant System:</span> <span class="fw-semibold font-monospace ms-1 text-primary" id="detailTenantSlug">--</span></p>
+                            </div>
+                            <div class="col-md-6 ps-4">
+                                <h6 class="fw-bold text-secondary text-uppercase small mb-3 border-bottom pb-2">Thông tin Gói cước</h6>
+                                <p class="mb-2"><span class="text-muted small">Tên gói:</span> <span class="fw-bold text-dark ms-1" id="detailPlanName">--</span></p>
+                                <p class="mb-2"><span class="text-muted small">Chu kỳ thanh toán:</span> <span class="fw-semibold ms-1" id="detailCycle">--</span></p>
+                                <p class="mb-2"><span class="text-muted small">Tổng giá trị:</span> <span class="fw-bold text-success ms-1" id="detailTotalValue">--</span></p>
+                            </div>
+                            
+                            <div class="col-12 mt-4">
+                                <h6 class="fw-bold text-secondary text-uppercase small mb-3 border-bottom pb-2">Tiến độ & Trạng thái</h6>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <div><span class="text-muted small">Ngày bắt đầu:</span> <span class="fw-semibold" id="detailStartDate">--</span></div>
+                                    <div><span class="text-muted small">Ngày kết thúc:</span> <span class="fw-semibold" id="detailEndDate">--</span></div>
+                                </div>
+                                <div class="progress mt-2" style="height: 10px;" id="contractProgressContainer">
+                                    <div id="contractProgressBar" class="progress-bar bg-success" role="progressbar" style="width: 0%;"></div>
+                                </div>
+                                <div class="text-end mt-1"><small class="text-muted fst-italic" id="detailDaysLeft">--</small></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light justify-content-between">
+                    <div>
+                        <button type="button" class="btn btn-outline-dark btn-sm fw-semibold"><i class="bi bi-printer me-1"></i> In</button>
+                        <button type="button" class="btn btn-outline-danger btn-sm fw-semibold"><i class="bi bi-file-pdf me-1"></i> Tải PDF</button>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script>
+        let detailModal;
+        let allContracts = []; // Bộ nhớ đệm lưu trữ danh sách hợp đồng để Filter nội bộ
+
+        document.addEventListener("DOMContentLoaded", () => {
+            // 1. GUARD BẢO MẬT ADMIN
+            const token = localStorage.getItem("access_token");
+            const userJson = localStorage.getItem("user");
+
+            if (!token || !userJson) {
+                window.location.href = "../login.html";
+                return;
+            }
+
+            const currentUser = JSON.parse(userJson);
+            const userRole = currentUser.role ? currentUser.role.name.toLowerCase() : "user";
+
+            if (userRole !== "admin") {
+                window.location.href = "../user/dashboard.html";
+                return;
+            }
+
+            // 2. HIỂN THỊ GIAO DIỆN
+            detailModal = new bootstrap.Modal(document.getElementById('contractDetailModal'));
+            document.getElementById("nav-username").innerText = currentUser.username;
+            document.getElementById("nav-role").innerText = "QUẢN TRỊ VIÊN";
+
+            // 3. LOAD DATA
+            loadContracts();
+        });
+
+        // ==========================================
+        // CÁC HÀM XỬ LÝ DỮ LIỆU
+        // ==========================================
+
+        async function loadContracts() {
+            const tbody = document.getElementById("contracts-tbody");
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang truy xuất dữ liệu...</td></tr>';
+
+            try {
+                // Giả định API Backend có route lấy tất cả Hợp đồng: GET /business/contracts
+                // Nếu backend chỉ có GET /business/customers, bạn có thể cần vòng lặp hoặc tạo route mới.
+                const response = await apiClient.fetch("/business/contracts");
+                allContracts = Array.isArray(response) ? response : (response.data || []);
+
+                // Chạy hàm lọc (mặc định lấy ALL) để render bảng
+                filterContracts();
+
+            } catch (error) {
+                console.error("Lỗi tải danh sách hợp đồng:", error);
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-danger">
+                    <i class="bi bi-exclamation-triangle fs-3 d-block mb-2"></i>
+                    Không thể kết nối đến API lấy dữ liệu hợp đồng. 
+                    <br><small class="text-muted">Gợi ý: Cần bổ sung Endpoint <code>GET /business/contracts</code> cho quyền Admin trên Backend.</small>
+                </td></tr>`;
+            }
+        }
+
+        // Hàm render dữ liệu ra bảng
+        function renderTable(dataList) {
+            const tbody = document.getElementById("contracts-tbody");
+            
+            if (!dataList || dataList.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5 text-muted">Không tìm thấy hợp đồng nào phù hợp.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = "";
+            dataList.forEach(ct => {
+                const s = (ct.status || 'PENDING').toUpperCase();
+                let statusBadge = "";
+                if (s === 'ACTIVE') statusBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2">Đang hiệu lực</span>';
+                else if (s === 'PENDING') statusBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning-subtle px-2">Chờ duyệt</span>';
+                else if (s === 'EXPIRED') statusBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2">Đã hết hạn</span>';
+                else if (s === 'CANCELED') statusBadge = '<span class="badge bg-secondary px-2">Đã hủy</span>';
+
+                // Tên khách hàng an toàn
+                const custName = ct.customer ? ct.customer.company_name : 'N/A';
+
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td class="text-center fw-bold text-secondary border-end">#${ct.id}</td>
+                    <td class="font-monospace fw-bold text-dark">HĐ-${ct.id.toString().padStart(4, '0')}</td>
+                    <td class="fw-semibold text-primary">${custName}</td>
+                    <td>${ct.plan ? ct.plan.name : 'Dịch vụ tùy chỉnh'}</td>
+                    <td>
+                        <div class="small">${utils.formatDate(ct.start_date, false)} <i class="bi bi-arrow-right mx-1 text-muted"></i> ${utils.formatDate(ct.end_date, false)}</div>
+                    </td>
+                    <td class="fw-bold text-dark">${utils.formatCurrency(ct.total_value || 0)}</td>
+                    <td>${statusBadge}</td>
+                    <td class="text-center">
+                        <div class="btn-group">
+                            <button onclick="viewContractDetails(${ct.id})" class="btn btn-outline-primary action-btn" title="Xem chi tiết"><i class="bi bi-info-circle"></i></button>
+                            <button onclick="mockAction('Sửa Hợp đồng', 'Mở form chỉnh sửa điều khoản và gia hạn cho hợp đồng HĐ-${ct.id}')" class="btn btn-outline-dark action-btn" title="Sửa (Edit)"><i class="bi bi-pencil-square"></i></button>
+                            ${s === 'PENDING' 
+                                ? `<button onclick="mockAction('Duyệt Hợp đồng', 'Hợp đồng HĐ-${ct.id} đã được chuyển sang trạng thái ACTIVE.')" class="btn btn-outline-success action-btn" title="Duyệt (Approve)"><i class="bi bi-check-circle"></i></button>`
+                                : `<button onclick="mockAction('Hủy Hợp đồng', 'Lệnh hủy hợp đồng HĐ-${ct.id} đang chờ xác nhận.')" class="btn btn-outline-danger action-btn" title="Hủy (Cancel)"><i class="bi bi-x-circle"></i></button>`
+                            }
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // ==========================================
+        // CÁC HÀM TÌM KIẾM & LỌC (FILTER/SEARCH)
+        // ==========================================
+
+        function filterContracts() {
+            const searchText = document.getElementById("searchInput").value.toLowerCase();
+            const statusFilter = document.getElementById("statusFilter").value;
+
+            // Tiến hành lọc dữ liệu từ biến nhớ đệm allContracts
+            const filteredData = allContracts.filter(ct => {
+                const code = `hđ-${ct.id.toString().padStart(4, '0')}`.toLowerCase();
+                const custName = (ct.customer ? ct.customer.company_name : "").toLowerCase();
+                const status = (ct.status || 'PENDING').toUpperCase();
+
+                // 1. Kiểm tra Search Text (Tìm theo Mã HĐ hoặc Tên Công ty)
+                const matchSearch = code.includes(searchText) || custName.includes(searchText);
+
+                // 2. Kiểm tra Dropdown Status
+                const matchStatus = (statusFilter === "ALL") || (status === statusFilter);
+
+                return matchSearch && matchStatus;
+            });
+
+            // Gọi hàm render với dữ liệu đã được lọc
+            renderTable(filteredData);
+        }
+
+        // ==========================================
+        // CÁC HÀM CHI TIẾT & MOCK HÀNH ĐỘNG
+        // ==========================================
+
+        function viewContractDetails(contractId) {
+            const ct = allContracts.find(c => c.id === contractId);
+            if (!ct) return;
+
+            document.getElementById("modalLoading").classList.add("d-none");
+            document.getElementById("modalContent").classList.remove("d-none");
+
+            // Fill dữ liệu
+            document.getElementById("modalContractCode").innerText = `HĐ-${ct.id.toString().padStart(4, '0')}`;
+            document.getElementById("detailCustomerName").innerText = ct.customer ? ct.customer.company_name : 'N/A';
+            document.getElementById("detailTaxCode").innerText = ct.customer ? (ct.customer.tax_code || 'Không có') : 'N/A';
+            document.getElementById("detailTenantSlug").innerText = ct.customer ? (ct.customer.tenant_slug || 'Chưa gắn Tenant') : 'N/A';
+            
+            document.getElementById("detailPlanName").innerText = ct.plan ? ct.plan.name : 'Custom / Unassigned';
+            document.getElementById("detailCycle").innerText = ct.billing_cycle || 'Tháng';
+            document.getElementById("detailTotalValue").innerText = utils.formatCurrency(ct.total_value || 0);
+
+            document.getElementById("detailStartDate").innerText = ct.start_date ? utils.formatDate(ct.start_date, false) : '--';
+            document.getElementById("detailEndDate").innerText = ct.end_date ? utils.formatDate(ct.end_date, false) : '--';
+
+            // Tính toán tiến trình (Progress Bar)
+            const today = new Date();
+            const start = new Date(ct.start_date);
+            const end = new Date(ct.end_date);
+            
+            if(ct.start_date && ct.end_date && start < end) {
+                const totalDays = (end - start) / (1000 * 60 * 60 * 24);
+                const passedDays = (today - start) / (1000 * 60 * 60 * 24);
+                
+                let percent = (passedDays / totalDays) * 100;
+                if(percent < 0) percent = 0;
+                if(percent > 100) percent = 100;
+
+                const pb = document.getElementById("contractProgressBar");
+                pb.style.width = `${percent}%`;
+                
+                if (percent >= 100) {
+                    pb.className = "progress-bar bg-danger";
+                    document.getElementById("detailDaysLeft").innerText = "Hợp đồng đã hết hạn";
+                } else if (percent > 80) {
+                    pb.className = "progress-bar bg-warning";
+                    const left = Math.ceil(totalDays - passedDays);
+                    document.getElementById("detailDaysLeft").innerHTML = `Sắp hết hạn (Còn <strong class="text-warning">${left} ngày</strong>)`;
+                } else {
+                    pb.className = "progress-bar bg-success";
+                    const left = Math.ceil(totalDays - passedDays);
+                    document.getElementById("detailDaysLeft").innerText = `Còn ${left} ngày sử dụng`;
+                }
+            } else {
+                document.getElementById("contractProgressBar").style.width = "0%";
+                document.getElementById("detailDaysLeft").innerText = "--";
+            }
+
+            detailModal.show();
+        }
+
+        function mockAction(title, message) {
+            const alertBox = document.getElementById("action-alert");
+            alertBox.className = "alert alert-info py-2 shadow-sm border-info";
+            alertBox.innerHTML = `<i class="bi bi-info-circle-fill me-2"></i><strong>[DEMO] ${title}:</strong> ${message}`;
+            alertBox.classList.remove("d-none");
+            window.scrollTo(0, 0);
+            setTimeout(() => { alertBox.classList.add("d-none"); }, 4000);
+        }
+    </script>
+</body>
+</html>
