@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tổng quan - Suncloud Client Portal</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        /* Tinh chỉnh khoảng cách do có Navbar cố định phía trên */
+        body {
+            padding-top: var(--navbar-height);
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-light bg-white fixed-top navbar-custom">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold text-primary d-flex align-items-center" href="dashboard.html">
+                <i class="bi bi-cloud-fill fs-4 me-2"></i> Suncloud Portal
+            </a>
+            <div class="ms-auto d-flex align-items-center">
+                <div class="me-3 text-end d-none d-sm-block">
+                    <div id="user-display-name" class="fw-semibold text-dark">Đang tải...</div>
+                    <small id="user-display-role" class="text-muted text-uppercase" style="font-size: 0.75rem;"></small>
+                </div>
+                <button onclick="window.logout()" class="btn btn-outline-danger btn-sm fw-semibold px-3">
+                    <i class="bi bi-box-arrow-right me-1"></i> Đăng xuất
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+        
+        <div class="sidebar sidebar-light">
+            <a href="dashboard.html" class="active"><i class="bi bi-speedometer2 me-2"></i> Tổng quan</a>
+            <a href="my-vms.html"><i class="bi bi-pc-display me-2"></i> Máy ảo của tôi</a>
+            <a href="my-devices.html"><i class="bi bi-server me-2"></i> Thiết bị của tôi</a>
+            <a href="billing.html"><i class="bi bi-receipt me-2"></i> Gói cước & Thanh toán</a>
+            <a href="profile.html"><i class="bi bi-person me-2"></i> Thông tin cá nhân</a>
+        </div>
+
+        <main class="main-content">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h4 class="fw-bold text-dark mb-1" id="welcome-title">Xin chào!</h4>
+                    <p class="text-secondary small mb-0">Hệ thống giám sát trạng thái tài nguyên đám mây theo thời gian thực.</p>
+                </div>
+                <div>
+                    <button onclick="loadDashboardData()" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Làm mới
+                    </button>
+                </div>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <div class="col-md-4">
+                    <div class="card card-custom p-4 border-start border-primary border-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted small text-uppercase fw-bold mb-2">Máy ảo đang chạy</h6>
+                                <h2 id="count-vms" class="fw-bold mb-0 text-dark">--</h2>
+                            </div>
+                            <div class="fs-1 text-primary opacity-50"><i class="bi bi-pc-display"></i></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card card-custom p-4 border-start border-success border-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted small text-uppercase fw-bold mb-2">Thiết bị phần cứng</h6>
+                                <h2 id="count-devices" class="fw-bold mb-0 text-dark">--</h2>
+                            </div>
+                            <div class="fs-1 text-success opacity-50"><i class="bi bi-server"></i></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card card-custom p-4 border-start border-warning border-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="text-muted small text-uppercase fw-bold mb-2">Hợp đồng kích hoạt</h6>
+                                <h2 id="count-contracts" class="fw-bold mb-0 text-dark">--</h2>
+                            </div>
+                            <div class="fs-1 text-warning opacity-50"><i class="bi bi-receipt"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-lg-7">
+                    <div class="card card-custom h-100">
+                        <div class="card-header">Thông báo hệ thống & Hướng dẫn</div>
+                        <div class="card-body">
+                            <div class="alert alert-info border-0 mb-4" role="alert">
+                                <h6 class="alert-heading fw-bold"><i class="bi bi-info-circle-fill me-2"></i>Quy trình cấp phát tài nguyên</h6>
+                                <p class="small mb-0 mt-2">Hệ thống tự động liên kết tài khoản của bạn với Tenant tương ứng trên NetBox. Khi tạo mới hoặc thay đổi trạng thái Máy ảo tại mục <strong>"Máy ảo của tôi"</strong>, các cấu hình mạng (IPAM) và thiết bị vật lý (DCIM) sẽ được đồng bộ tự động trong vòng 30 giây.</p>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-3">Các bước bắt đầu nhanh:</h6>
+                            <ol class="text-secondary small ps-3">
+                                <li class="mb-2">Kiểm tra thông tin hồ sơ doanh nghiệp tại mục <strong>Thông tin cá nhân</strong>.</li>
+                                <li class="mb-2">Truy cập <strong>Thiết bị của tôi</strong> để xem danh sách phần cứng bare-metal và router chuyên dụng được bàn giao.</li>
+                                <li class="mb-2">Sử dụng tính năng điều khiển bật/tắt trực tiếp máy ảo tại phân hệ <strong>Máy ảo của tôi</strong>.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-5">
+                    <div class="card card-custom h-100">
+                        <div class="card-header">Trạng thái kết nối hạ tầng</div>
+                        <div class="card-body p-0">
+                            <ul class="list-group list-group-flush small">
+                                <li class="list-group-item d-flex justify-content-between align-items-center px-4 py-3">
+                                    <div class="fw-semibold">Cổng API Core Portal</div>
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">Ổn định</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center px-4 py-3">
+                                    <div class="fw-semibold">Trục đồng bộ NetBox API</div>
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">Đã kết nối</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center px-4 py-3">
+                                    <div class="fw-semibold">Hệ thống giám sát ảo hóa</div>
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">Trực tuyến</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script>
+        // Kiểm tra Token ngay khi tải trang, nếu không có sẽ tự động điều hướng ra ngoài
+        if (!localStorage.getItem("access_token")) {
+            window.location.href = "../login.html";
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            // Hiển thị thông tin cơ bản của User đã lưu từ bước đăng nhập lên Navbar
+            const currentUser = utils.getCurrentUser();
+            if (currentUser) {
+                document.getElementById("user-display-name").innerText = currentUser.username;
+                document.getElementById("user-display-role").innerText = currentUser.role ? currentUser.role.name : "USER";
+                document.getElementById("welcome-title").innerText = `Xin chào, ${currentUser.username}!`;
+                
+                // Sau khi xác định thực thể user hợp lệ, tiến hành gọi các API lấy số liệu
+                loadDashboardData(currentUser);
+            }
+        });
+
+        /**
+         * Gọi API lấy số lượng tài nguyên thuộc sở hữu của User
+         */
+        async function loadDashboardData(user) {
+            try {
+                // Gọi song song API lấy danh sách máy ảo của user
+                const vmsData = await apiClient.fetch("/virtualization/vms");
+                document.getElementById("count-vms").innerText = vmsData && vmsData.total !== undefined ? vmsData.total : 0;
+                
+                // Mặc định hiển thị hoặc gọi các API bổ trợ tương ứng với hạ tầng được cấp phát
+                document.getElementById("count-devices").innerText = "0"; 
+                document.getElementById("count-contracts").innerText = "0";
+
+                if (user && user.id) {
+                    // Gọi API dựa trên user.id khớp với bảng contracts
+                    const contractsData = await apiClient.fetch(`/billing/users/${user.id}/contracts`);
+                    if (Array.isArray(contractsData)) {
+                        document.getElementById("count-contracts").innerText = contractsData.length;
+                    }
+                }
+            } catch (error) {
+                console.error("Lỗi khi tải dữ liệu tổng quan dashboard:", error);
+            }
+        }
+    </script>
+</body>
+</html>

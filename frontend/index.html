@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suncloud - Nền tảng Quản trị Hạ tầng Đám mây</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <link rel="stylesheet" href="assets/css/style.css">
+    
+    <style>
+        /* CSS riêng biệt cho landing page để không làm nặng file style chung */
+        .hero-section {
+            padding: 100px 0 60px;
+            background: linear-gradient(to right, #f8f9fa, #ffffff);
+        }
+        .hero-img {
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            width: 100%;
+            height: auto;
+            object-fit: cover;
+        }
+        .feature-icon-box {
+            width: 64px;
+            height: 64px;
+            background-color: rgba(13, 110, 253, 0.1);
+            color: var(--primary-color);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+        }
+        .section-padding {
+            padding: 80px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm fixed-top navbar-custom">
+        <div class="container">
+            <a class="navbar-brand fw-bold text-primary d-flex align-items-center" href="index.html">
+                <i class="bi bi-cloud-fill fs-3 me-2"></i> Suncloud Portal
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto ms-4">
+                    <li class="nav-item"><a class="nav-link fw-medium active" href="#">Trang chủ</a></li>
+                    <li class="nav-item"><a class="nav-link fw-medium" href="#features">Giải pháp</a></li>
+                    <li class="nav-item"><a class="nav-link fw-medium" href="#infrastructure">Hạ tầng</a></li>
+                </ul>
+                <div class="d-flex gap-2">
+                    <a href="login.html" class="btn btn-outline-primary px-4 fw-semibold">Đăng nhập</a>
+                    <a href="register.html" class="btn btn-primary px-4 fw-semibold">Đăng ký</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero-section mt-5">
+        <div class="container">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-6">
+                    <span class="badge bg-primary bg-opacity-10 text-primary mb-3 px-3 py-2 border border-primary-subtle">Phiên bản 1.0</span>
+                    <h1 class="display-4 fw-bold mb-4 text-dark" style="line-height: 1.2;">Quản trị Hạ tầng <br><span class="text-primary">Đám mây Toàn diện</span></h1>
+                    <p class="lead text-secondary mb-4">Hệ thống cung cấp giải pháp cấp phát tài nguyên tự động, quản lý thiết bị vật lý qua NetBox và tối ưu hóa hạ tầng mạng (IPAM) trên một giao diện duy nhất.</p>
+                    <div class="d-flex gap-3">
+                        <a href="login.html" class="btn btn-primary btn-lg px-4 fw-semibold">Truy cập Console</a>
+                        <a href="#features" class="btn btn-light border btn-lg px-4 fw-semibold">Tìm hiểu thêm</a>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1000&auto=format&fit=crop" alt="Cloud Network" class="hero-img">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="features" class="section-padding bg-white">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="fw-bold">Năng lực Cốt lõi</h2>
+                <p class="text-secondary">Tối ưu hóa quy trình vận hành với bộ công cụ quản trị mạnh mẽ.</p>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="card card-custom h-100 p-4 border-0">
+                        <div class="feature-icon-box"><i class="bi bi-pc-display"></i></div>
+                        <h4 class="fw-semibold">Cụm Ảo hóa (Virtualization)</h4>
+                        <p class="text-muted mb-0">Quản lý vòng đời máy ảo, theo dõi trạng thái hoạt động trực tiếp, giám sát chỉ số CPU/RAM và gán quyền tự phục vụ cho khách hàng.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card card-custom h-100 p-4 border-0">
+                        <div class="feature-icon-box"><i class="bi bi-server"></i></div>
+                        <h4 class="fw-semibold">Hạ tầng Vật lý (DCIM)</h4>
+                        <p class="text-muted mb-0">Kiểm soát chi tiết các máy chủ bare-metal, thiết bị định tuyến và hệ thống không gian tủ rack vật lý được đồng bộ thời gian thực từ NetBox.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card card-custom h-100 p-4 border-0">
+                        <div class="feature-icon-box"><i class="bi bi-hdd-network"></i></div>
+                        <h4 class="fw-semibold">Quy hoạch Mạng (IPAM)</h4>
+                        <p class="text-muted mb-0">Quản lý dải IP tĩnh/động, cấu hình VLAN, Subnet tập trung, ngăn chặn triệt để tình trạng xung đột tài nguyên mạng trên toàn hệ thống.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="infrastructure" class="section-padding bg-main">
+        <div class="container">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-5 order-lg-2">
+                    <h2 class="fw-bold mb-4">Hạ tầng Data Center chuẩn Enterprise</h2>
+                    <p class="text-secondary mb-4">Toàn bộ thiết bị phần cứng được đặt tại các trung tâm dữ liệu đạt chuẩn Tier III, đảm bảo tính sẵn sàng cao (Uptime 99.99%) và bảo mật vật lý nhiều lớp.</p>
+                    <ul class="list-unstyled text-secondary">
+                        <li class="mb-3"><i class="bi bi-check-circle-fill text-success me-2"></i> Kết nối băng thông rộng tốc độ cao.</li>
+                        <li class="mb-3"><i class="bi bi-check-circle-fill text-success me-2"></i> Hệ thống nguồn điện dự phòng N+1.</li>
+                        <li class="mb-3"><i class="bi bi-check-circle-fill text-success me-2"></i> Giám sát môi trường (nhiệt độ, độ ẩm) 24/7.</li>
+                    </ul>
+                </div>
+                <div class="col-lg-7 order-lg-1">
+                    <img src="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=1000&auto=format&fit=crop" alt="Server Data Center" class="img-fluid rounded-4 shadow">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="bg-dark text-white py-4 mt-auto">
+        <div class="container text-center">
+            <p class="mb-1">&copy; 2026 Suncloud Management Portal. All rights reserved.</p>
+            <p class="text-white-50 small mb-0">Phát triển cho hệ thống quản trị nội bộ và khách hàng doanh nghiệp.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/utils.js"></script>
+    <script src="assets/js/api.js"></script>
+</body>
+</html>
