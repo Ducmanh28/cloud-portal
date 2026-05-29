@@ -17,7 +17,7 @@
 </head>
 <body>
 
-    <nav class="navbar navbar-expand-lg navbar-light bg-white fixed-top navbar-custom">
+    <nav class="navbar navbar-expand-lg navbar-light bg-white fixed-top navbar-custom shadow-sm">
         <div class="container-fluid px-4">
             <a class="navbar-brand fw-bold text-primary d-flex align-items-center" href="dashboard.html">
                 <i class="bi bi-cloud-fill fs-4 me-2"></i> Suncloud Portal
@@ -49,24 +49,31 @@
                     <h4 class="fw-bold text-dark mb-1">Quản lý hóa đơn & Cước dịch vụ</h4>
                     <p class="text-secondary small mb-0">Theo dõi lịch sử giao dịch, trạng thái thanh toán và thông tin từ hợp đồng.</p>
                 </div>
+                <button onclick="refreshData()" class="btn btn-primary btn-sm fw-semibold">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Làm mới dữ liệu
+                </button>
             </div>
 
             <div class="row g-4 mb-4">
                 <div class="col-sm-6 col-md-4">
-                    <div class="card card-custom p-3 border-start border-danger border-4">
+                    <div class="card card-custom p-3 border-start border-danger border-4 shadow-sm">
                         <span class="text-muted small text-uppercase fw-bold">Cần thanh toán</span>
-                        <h3 id="summary-unpaid" class="fw-bold text-dark mt-1">0 ₫</h3>
+                        <h3 id="summary-unpaid" class="fw-bold text-dark mt-1">
+                            <span class="spinner-border spinner-border-sm text-danger" role="status"></span>
+                        </h3>
                     </div>
                 </div>
                 <div class="col-sm-6 col-md-4">
-                    <div class="card card-custom p-3 border-start border-success border-4">
+                    <div class="card card-custom p-3 border-start border-success border-4 shadow-sm">
                         <span class="text-muted small text-uppercase fw-bold">Đã thanh toán</span>
-                        <h3 id="summary-paid" class="fw-bold text-dark mt-1">0 ₫</h3>
+                        <h3 id="summary-paid" class="fw-bold text-dark mt-1">
+                            <span class="spinner-border spinner-border-sm text-success" role="status"></span>
+                        </h3>
                     </div>
                 </div>
             </div>
 
-            <div class="card card-custom mb-4">
+            <div class="card card-custom mb-4 shadow-sm">
                 <div class="card-body py-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
                     <div class="btn-group btn-group-sm" role="group">
                         <button onclick="filterInvoices('ALL')" id="btn-filter-ALL" class="btn btn-primary filter-btn">Tất cả</button>
@@ -77,7 +84,7 @@
                 </div>
             </div>
 
-            <div class="card card-custom">
+            <div class="card card-custom shadow-sm">
                 <div class="card-body p-0 table-responsive">
                     <table class="table table-hover table-middle mb-0 table-custom">
                         <thead>
@@ -92,7 +99,7 @@
                             </tr>
                         </thead>
                         <tbody id="invoices-tbody">
-                            <tr><td colspan="7" class="text-center py-4 text-muted">Đang tải lịch sử hóa đơn...</td></tr>
+                            <tr><td colspan="7" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải lịch sử hóa đơn...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -105,61 +112,91 @@
     <script src="../assets/js/api.js"></script>
     <script src="../assets/js/auth.js"></script>
     <script>
-        if (!localStorage.getItem("access_token")) window.location.href = "../login.html";
-
         let allInvoices = [];
+        let currentUserId = null;
 
         document.addEventListener("DOMContentLoaded", () => {
-            const currentUser = utils.getCurrentUser();
-            if (currentUser) {
-                document.getElementById("nav-username").innerText = currentUser.username;
-                document.getElementById("nav-role").innerText = currentUser.role ? currentUser.role.name : "USER";
-                // Lấy danh sách theo user.id (khớp với khóa ngoại user_id trong bảng contracts)
-                loadInvoices(currentUser.id);
+            // 1. GUARD: BẢO VỆ GIAO DIỆN KHÁCH HÀNG
+            const token = localStorage.getItem("access_token");
+            const userJson = localStorage.getItem("user");
+
+            if (!token || !userJson) {
+                window.location.href = "../login.html";
+                return;
             }
+
+            const currentUser = JSON.parse(userJson);
+            const userRole = currentUser.role ? currentUser.role.name.toLowerCase() : "user";
+
+            // KIỂM TRA: ĐÁ QUẢN TRỊ VIÊN VỀ TRANG ADMIN
+            if (userRole === "admin") {
+                window.location.href = "../admin/dashboard.html";
+                return;
+            }
+
+            // 2. HIỂN THỊ THÔNG TIN VÀ KHỞI TẠO
+            document.getElementById("nav-username").innerText = currentUser.username;
+            document.getElementById("nav-role").innerText = currentUser.role ? currentUser.role.name : "USER";
+            
+            currentUserId = currentUser.id;
+            loadInvoices(currentUserId);
         });
+
+        function refreshData() {
+            if (currentUserId) {
+                document.getElementById("invoices-tbody").innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang làm mới dữ liệu...</td></tr>';
+                loadInvoices(currentUserId);
+            }
+        }
 
         async function loadInvoices(userId) {
             const tbody = document.getElementById("invoices-tbody");
             try {
-                // API Backend sẽ join bảng `invoices` và `contracts` dựa trên user_id
-                allInvoices = await apiClient.fetch(`/billing/users/${userId}/invoices`);
+                const response = await apiClient.fetch(`/billing/users/${userId}/invoices`);
+                // Chuẩn hóa dữ liệu mảng an toàn
+                allInvoices = Array.isArray(response) ? response : (response.data || []);
                 
                 let totalUnpaid = 0;
                 let totalPaid = 0;
 
                 allInvoices.forEach(inv => {
-                    // Dựa chuẩn vào trường payment_status ('PAID','UNPAID','OVERDUE')
-                    const status = inv.payment_status.toUpperCase();
+                    // Xử lý an toàn tránh undefined
+                    const status = (inv.payment_status || 'UNPAID').toUpperCase();
+                    const amount = parseFloat(inv.amount || 0);
+
                     if (status === 'UNPAID' || status === 'OVERDUE') {
-                        totalUnpaid += parseFloat(inv.amount);
+                        totalUnpaid += amount;
                     } else if (status === 'PAID') {
-                        totalPaid += parseFloat(inv.amount);
+                        totalPaid += amount;
                     }
                 });
 
                 document.getElementById("summary-unpaid").innerText = utils.formatCurrency(totalUnpaid);
                 document.getElementById("summary-paid").innerText = utils.formatCurrency(totalPaid);
 
-                renderTable(allInvoices);
+                // Khởi tạo bộ lọc mặc định là ALL
+                filterInvoices('ALL');
 
             } catch (error) {
                 console.error("Lỗi tải hóa đơn:", error);
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Không thể kết nối đến phân hệ tài chính.</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Không thể kết nối đến phân hệ tài chính hoặc chưa có dữ liệu.</td></tr>`;
+                document.getElementById("summary-unpaid").innerText = "0 ₫";
+                document.getElementById("summary-paid").innerText = "0 ₫";
             }
         }
 
         function renderTable(invoicesList) {
             const tbody = document.getElementById("invoices-tbody");
             if (!invoicesList || invoicesList.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">Không tìm thấy hóa đơn nào.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted">Không tìm thấy hóa đơn nào trong danh mục này.</td></tr>';
                 return;
             }
 
             tbody.innerHTML = "";
             invoicesList.forEach(inv => {
                 let statusBadge = "";
-                const s = inv.payment_status.toUpperCase(); // Sử dụng trường payment_status
+                const s = (inv.payment_status || 'UNPAID').toUpperCase(); 
+                const amountFormatted = utils.formatCurrency(inv.amount || 0);
                 
                 if (s === 'PAID') {
                     statusBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">Đã thanh toán</span>';
@@ -167,23 +204,26 @@
                     statusBadge = '<span class="badge bg-warning bg-opacity-15 text-warning-emphasis border border-warning-subtle px-2 py-1">Chưa thanh toán</span>';
                 } else if (s === 'OVERDUE') {
                     statusBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-1">Quá hạn</span>';
+                } else {
+                    statusBadge = `<span class="badge bg-secondary">${s}</span>`;
                 }
 
-                // Nút tải chứng từ (dựa vào trường invoice_url trong db)
+                // Xử lý nút tải chứng từ
                 const docBtn = inv.invoice_url 
                     ? `<a href="${inv.invoice_url}" target="_blank" class="btn btn-sm btn-light border py-0 px-2"><i class="bi bi-file-earmark-pdf text-danger"></i> Tải PDF</a>`
                     : `<span class="text-muted small">N/A</span>`;
 
+                // Xử lý nút Hành động (Gắn sự kiện thực tế)
                 const actionBtn = (s === 'UNPAID' || s === 'OVERDUE')
-                    ? `<button class="btn btn-sm btn-primary py-0 px-2 fw-semibold">Thanh toán</button>`
-                    : `<button class="btn btn-sm btn-outline-secondary py-0 px-2" disabled>Hoàn tất</button>`;
+                    ? `<button onclick="payInvoice(${inv.id})" class="btn btn-sm btn-primary py-0 px-2 fw-semibold"><i class="bi bi-credit-card me-1"></i>Thanh toán</button>`
+                    : `<button class="btn btn-sm btn-outline-secondary py-0 px-2" disabled><i class="bi bi-check-circle me-1"></i>Hoàn tất</button>`;
 
                 const tr = document.createElement("tr");
                 tr.innerHTML = `
-                    <td class="text-center fw-bold text-secondary">#${inv.id}</td>
-                    <td class="fw-semibold text-dark">HĐ-${inv.contract_id}</td>
-                    <td class="fw-bold text-dark">${utils.formatCurrency(inv.amount)}</td>
-                    <td>${utils.formatDate(inv.billing_date, false)}</td>
+                    <td class="text-center fw-bold text-secondary">#${inv.id || '--'}</td>
+                    <td class="fw-semibold text-dark">HĐ-${inv.contract_id || 'N/A'}</td>
+                    <td class="fw-bold text-dark">${amountFormatted}</td>
+                    <td>${inv.billing_date ? utils.formatDate(inv.billing_date, false) : '--/--/----'}</td>
                     <td>${statusBadge}</td>
                     <td class="text-center">${docBtn}</td>
                     <td class="text-center">${actionBtn}</td>
@@ -198,14 +238,25 @@
                 btn.classList.remove('btn-primary');
                 btn.classList.add('btn-outline-primary');
             });
-            document.getElementById(`btn-filter-${statusType}`).classList.remove('btn-outline-primary');
-            document.getElementById(`btn-filter-${statusType}`).classList.add('btn-primary');
+            
+            // Xử lý giao diện nút Filter
+            const activeBtn = document.getElementById(`btn-filter-${statusType}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('btn-outline-primary');
+                activeBtn.classList.add('btn-primary');
+            }
 
+            // Lọc và render dữ liệu
             if (statusType === 'ALL') {
                 renderTable(allInvoices);
             } else {
-                renderTable(allInvoices.filter(i => i.payment_status.toUpperCase() === statusType));
+                renderTable(allInvoices.filter(i => (i.payment_status || '').toUpperCase() === statusType));
             }
+        }
+
+        function payInvoice(invoiceId) {
+            // Hàm xử lý khi khách hàng bấm nút Thanh toán
+            alert(`Hệ thống đang khởi tạo luồng thanh toán cho Hóa đơn #${invoiceId}. Tính năng kết nối cổng VNPay/MoMo sẽ được kích hoạt ở bản cập nhật sau!`);
         }
     </script>
 </body>

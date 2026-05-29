@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hồ sơ Quản trị viên - Suncloud Admin Portal</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        body { padding-top: var(--navbar-height); }
+        .profile-avatar {
+            width: 100px;
+            height: 100px;
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--bs-danger);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3.5rem;
+            border-radius: 50%;
+            margin: 0 auto;
+            border: 4px solid #fff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR QUẢN TRỊ -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top navbar-custom shadow-sm">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="dashboard.html">
+                <i class="bi bi-hdd-network-fill fs-4 me-2 text-primary"></i> Suncloud Admin Portal
+            </a>
+            <div class="ms-auto d-flex align-items-center text-white">
+                <div class="me-3 text-end d-none d-sm-block">
+                    <div id="nav-username" class="fw-semibold">Đang tải...</div>
+                    <small id="nav-role" class="text-white-50 text-uppercase" style="font-size: 0.75rem;"></small>
+                </div>
+                <button onclick="window.logout()" class="btn btn-outline-light btn-sm fw-semibold px-3">
+                    <i class="bi bi-box-arrow-right me-1"></i> Đăng xuất
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+        
+        <!-- SIDEBAR -->
+        <div class="sidebar sidebar-light">
+            <a href="dashboard.html"><i class="bi bi-speedometer2 me-2"></i> Tổng quan HT</a>
+            <a href="users.html"><i class="bi bi-people me-2"></i> Quản lý Người dùng</a>
+            <a href="my-vms.html"><i class="bi bi-pc-display me-2"></i> Quản lý Máy ảo</a>
+            <a href="dcim.html"><i class="bi bi-server me-2"></i> Hạ tầng Vật lý (DCIM)</a>
+            <a href="ipam.html"><i class="bi bi-diagram-3 me-2"></i> Quản lý Mạng (IPAM)</a>
+            <a href="billing.html"><i class="bi bi-building me-2"></i> Khách hàng & HĐ</a>
+            <a href="profile.html" class="active"><i class="bi bi-person-badge me-2"></i> Hồ sơ Quản trị</a>
+        </div>
+
+        <main class="main-content">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h4 class="fw-bold text-dark mb-1">Hồ sơ Quản trị viên (Admin Profile)</h4>
+                    <p class="text-secondary small mb-0">Quản lý thông tin định danh nội bộ và bảo mật tài khoản quản trị hệ thống.</p>
+                </div>
+            </div>
+
+            <!-- Khung thông báo chung -->
+            <div id="profile-alert" class="alert d-none py-2 shadow-sm" role="alert"></div>
+
+            <div class="row g-4">
+                <!-- CỘT TRÁI: THÔNG TIN ĐỊNH DANH -->
+                <div class="col-md-5 col-lg-4">
+                    <div class="card card-custom h-100 shadow-sm border-0">
+                        <div class="card-body text-center p-4">
+                            <div class="profile-avatar mb-3" id="adminAvatar">
+                                <i class="bi bi-shield-lock-fill"></i>
+                            </div>
+                            <h4 id="profile-username" class="fw-bold text-dark mb-1">--</h4>
+                            <span id="profile-role" class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle mb-3 px-3 py-2">--</span>
+                            
+                            <hr class="my-4 text-muted opacity-25">
+                            
+                            <div class="text-start">
+                                <h6 class="fw-bold small text-uppercase text-secondary mb-3">Định danh Quản trị</h6>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span class="text-muted small">Admin ID:</span>
+                                    <span id="profile-id" class="fw-semibold text-dark font-monospace">--</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span class="text-muted small">Trạng thái:</span>
+                                    <span id="profile-status">--</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span class="text-muted small">Phân quyền:</span>
+                                    <span class="fw-semibold text-danger small">Full Access</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted small">Phiên đăng nhập:</span>
+                                    <span class="fw-semibold text-dark small font-monospace">Active</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CỘT PHẢI: FORM CHỈNH SỬA & BẢO MẬT -->
+                <div class="col-md-7 col-lg-8">
+                    
+                    <!-- Form 1: Thông tin liên hệ Nội bộ -->
+                    <div class="card card-custom shadow-sm border-0 mb-4">
+                        <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                            <h6 class="fw-bold text-dark mb-0"><i class="bi bi-person-lines-fill me-2 text-primary"></i>Thông tin liên hệ Nội bộ</h6>
+                        </div>
+                        <div class="card-body p-4">
+                            <form id="updateProfileForm" onsubmit="handleUpdateProfile(event)">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label fw-semibold small text-secondary">Họ và tên Quản trị viên</label>
+                                        <input type="text" id="input-fullname" class="form-control" placeholder="Tên hiển thị">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label fw-semibold small text-secondary">Số điện thoại khẩn cấp (NOC)</label>
+                                        <input type="text" id="input-phone" class="form-control" placeholder="09xx xxx xxx">
+                                    </div>
+                                    <div class="col-md-6 mb-4">
+                                        <label class="form-label fw-semibold small text-secondary">Email liên hệ (Công việc)</label>
+                                        <input type="email" id="input-email" class="form-control" placeholder="admin@suncloud.vn">
+                                    </div>
+                                    <div class="col-md-6 mb-4">
+                                        <label class="form-label fw-semibold small text-secondary">Chức vụ / Bộ phận</label>
+                                        <input type="text" id="input-department" class="form-control" placeholder="VD: System Admin" value="NOC & System Administration">
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <button type="submit" id="btn-save-profile" class="btn btn-primary px-4 fw-semibold"><i class="bi bi-floppy me-2"></i>Lưu thông tin</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Form 2: Đổi mật khẩu Admin -->
+                    <div class="card card-custom shadow-sm border-0">
+                        <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                            <h6 class="fw-bold text-dark mb-0"><i class="bi bi-shield-lock me-2 text-danger"></i>Bảo mật Tài khoản Quản trị</h6>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="alert alert-warning border-0 py-2 small mb-4">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>Mật khẩu cấp độ Admin cần chứa ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt.
+                            </div>
+                            
+                            <form id="changePasswordForm" onsubmit="handleChangePassword(event)">
+                                <div class="row">
+                                    <div class="col-md-12 mb-3">
+                                        <label class="form-label fw-semibold small text-secondary">Mật khẩu hiện tại</label>
+                                        <input type="password" id="input-old-pass" class="form-control" placeholder="Nhập mật khẩu đang sử dụng" required>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label fw-semibold small text-secondary">Mật khẩu mới</label>
+                                        <input type="password" id="input-new-pass" class="form-control" placeholder="Tối thiểu 8 ký tự" minlength="8" required>
+                                    </div>
+                                    <div class="col-md-6 mb-4">
+                                        <label class="form-label fw-semibold small text-secondary">Xác nhận mật khẩu mới</label>
+                                        <input type="password" id="input-confirm-pass" class="form-control" placeholder="Nhập lại mật khẩu mới" minlength="8" required>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <button type="submit" id="btn-change-pass" class="btn btn-danger px-4 fw-semibold"><i class="bi bi-key me-2"></i>Cập nhật mật khẩu Admin</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // 1. CHỐT CHẶN BẢO MẬT: BẮT BUỘC LÀ ADMIN
+            const token = localStorage.getItem("access_token");
+            const userJson = localStorage.getItem("user");
+
+            if (!token || !userJson) {
+                window.location.href = "../login.html";
+                return;
+            }
+
+            const currentUser = JSON.parse(userJson);
+            const userRole = currentUser.role ? currentUser.role.name.toLowerCase() : "user";
+
+            if (userRole !== "admin") {
+                window.location.href = "../user/dashboard.html"; // Trả về trang user nếu không đủ quyền
+                return;
+            }
+
+            // 2. TẢI DỮ LIỆU
+            loadAdminProfile();
+        });
+
+        async function loadAdminProfile() {
+            try {
+                // Fetch dữ liệu từ backend 
+                const user = await apiClient.fetch("/iam/users/me");
+                
+                // Set Navbar
+                document.getElementById("nav-username").innerText = user.username;
+                document.getElementById("nav-role").innerText = "QUẢN TRỊ VIÊN";
+
+                // Set Info Card
+                document.getElementById("profile-username").innerText = user.username;
+                document.getElementById("profile-role").innerText = "ADMINISTRATOR";
+                document.getElementById("profile-id").innerText = `ADM-${user.id}`;
+                
+                const statusEl = document.getElementById("profile-status");
+                statusEl.innerHTML = user.is_active ? utils.getStatusBadge("Active") : utils.getStatusBadge("Suspended");
+
+                // Fill Forms
+                if(user.email) document.getElementById("input-email").value = user.email;
+                if(user.full_name) document.getElementById("input-fullname").value = user.full_name;
+                
+                // Cập nhật lại cache (nếu API trả về dữ liệu mới)
+                localStorage.setItem("user", JSON.stringify(user));
+
+            } catch (error) {
+                console.error("Lỗi khi tải thông tin quản trị viên:", error);
+                showAlert('danger', 'Lỗi truy xuất dữ liệu định danh từ máy chủ.');
+            }
+        }
+
+        // ==========================================
+        // CÁC HÀM XỬ LÝ (MOCK CHO MỤC ĐÍCH DEMO)
+        // ==========================================
+
+        function handleUpdateProfile(e) {
+            e.preventDefault();
+            const btn = document.getElementById("btn-save-profile");
+            const fullname = document.getElementById("input-fullname").value;
+            
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang lưu...';
+
+            // Giả lập delay gọi API Update Profile
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-floppy me-2"></i>Lưu thông tin';
+                document.getElementById("nav-username").innerText = fullname || document.getElementById("profile-username").innerText;
+                showAlert('success', 'Đã cập nhật thông tin hồ sơ Quản trị viên thành công.');
+            }, 800);
+        }
+
+        function handleChangePassword(e) {
+            e.preventDefault();
+            const btn = document.getElementById("btn-change-pass");
+            const oldPass = document.getElementById("input-old-pass").value;
+            const newPass = document.getElementById("input-new-pass").value;
+            const confirmPass = document.getElementById("input-confirm-pass").value;
+
+            // Validate logic Frontend
+            if (newPass !== confirmPass) {
+                showAlert('warning', 'Mật khẩu mới và Xác nhận mật khẩu không trùng khớp!');
+                return;
+            }
+            if (oldPass === newPass) {
+                showAlert('warning', 'Mật khẩu mới phải khác mật khẩu hiện tại!');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Đang xử lý...';
+
+            // Giả lập delay API Update Password
+            setTimeout(() => {
+                document.getElementById("changePasswordForm").reset();
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-key me-2"></i>Cập nhật mật khẩu Admin';
+                showAlert('success', 'Thay đổi mật khẩu thành công. Lần đăng nhập tiếp theo vui lòng sử dụng mật khẩu mới.');
+            }, 1000);
+        }
+
+        function showAlert(type, message) {
+            const alertBox = document.getElementById("profile-alert");
+            alertBox.className = `alert alert-${type} py-2 shadow-sm mb-4 border-${type}`;
+            
+            let icon = 'bi-info-circle-fill';
+            if(type === 'success') icon = 'bi-check-circle-fill';
+            if(type === 'warning') icon = 'bi-exclamation-triangle-fill';
+            if(type === 'danger') icon = 'bi-shield-fill-x';
+
+            alertBox.innerHTML = `<i class="bi ${icon} me-2"></i>${message}`;
+            alertBox.classList.remove("d-none");
+            
+            window.scrollTo(0, 0);
+
+            setTimeout(() => {
+                alertBox.classList.add("d-none");
+            }, 4000);
+        }
+    </script>
+</body>
+</html>

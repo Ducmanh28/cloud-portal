@@ -24,7 +24,7 @@ def get_ip_addresses(
         user_role = current_user.role.name if current_user.role else "USER"
         query_params = {}
 
-        if user_role == "ADMIN":
+        if user_role.upper() == "ADMIN":
             if tenant_slug:
                 query_params['tenant'] = tenant_slug
         else:
@@ -71,7 +71,7 @@ def get_vlans(
         user_role = current_user.role.name if current_user.role else "USER"
         query_params = {}
 
-        if user_role == "ADMIN":
+        if user_role.upper() == "ADMIN":
             if tenant_slug:
                 query_params['tenant'] = tenant_slug
         else:

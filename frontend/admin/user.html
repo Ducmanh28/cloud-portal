@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Người dùng (IAM) - Suncloud Admin Portal</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        body { padding-top: var(--navbar-height); }
+        .table-custom th { background-color: #f8f9fa; color: #495057; font-weight: 600; border-bottom: 2px solid #dee2e6; }
+        .action-btn { font-size: 0.85rem; padding: 0.25rem 0.5rem; }
+        .avatar-sm { width: 32px; height: 32px; background-color: #e9ecef; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; color: var(--primary-color); }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top navbar-custom shadow-sm">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="dashboard.html">
+                <i class="bi bi-hdd-network-fill fs-4 me-2 text-primary"></i> Suncloud Admin Portal
+            </a>
+            <div class="ms-auto d-flex align-items-center text-white">
+                <div class="me-3 text-end d-none d-sm-block">
+                    <div id="nav-username" class="fw-semibold">Đang tải...</div>
+                    <small id="nav-role" class="text-white-50 text-uppercase" style="font-size: 0.75rem;"></small>
+                </div>
+                <button onclick="window.logout()" class="btn btn-outline-light btn-sm fw-semibold px-3">
+                    <i class="bi bi-box-arrow-right me-1"></i> Đăng xuất
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+        <div class="sidebar sidebar-light">
+            <a href="dashboard.html"><i class="bi bi-speedometer2 me-2"></i> Tổng quan HT</a>
+            <a href="users.html" class="active"><i class="bi bi-people me-2"></i> Quản lý Người dùng</a>
+            <a href="my-vms.html"><i class="bi bi-pc-display me-2"></i> Quản lý Máy ảo</a>
+            <a href="dcim.html"><i class="bi bi-server me-2"></i> Hạ tầng Vật lý (DCIM)</a>
+            <a href="ipam.html"><i class="bi bi-diagram-3 me-2"></i> Quản lý Mạng (IPAM)</a>
+            <a href="billing.html"><i class="bi bi-building me-2"></i> Khách hàng & HĐ</a>
+        </div>
+
+        <main class="main-content">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h4 class="fw-bold text-dark mb-1">Định danh & Phân quyền (IAM)</h4>
+                    <p class="text-secondary small mb-0">Quản lý toàn bộ tài khoản người dùng, phân quyền truy cập và trạng thái hoạt động.</p>
+                </div>
+                <div>
+                    <button onclick="mockIamAction('Tạo Người dùng', 'Mở form khởi tạo tài khoản mới và cấp phát Role.')" class="btn btn-success btn-sm fw-semibold me-2">
+                        <i class="bi bi-person-plus-fill me-1"></i> Thêm Tài khoản
+                    </button>
+                    <button onclick="loadUsers()" class="btn btn-primary btn-sm fw-semibold">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Làm mới
+                    </button>
+                </div>
+            </div>
+
+            <div id="action-alert" class="alert d-none py-2 shadow-sm border" role="alert"></div>
+
+            <div class="card card-custom shadow-sm border-0">
+                <div class="card-body p-0 table-responsive">
+                    <table class="table table-hover table-middle mb-0 table-custom">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 60px;">ID</th>
+                                <th>Người dùng / Username</th>
+                                <th>Vai trò (Role)</th>
+                                <th>Doanh nghiệp (Tenant)</th>
+                                <th>Trạng thái</th>
+                                <th>Đăng nhập cuối</th>
+                                <th class="text-center" style="width: 250px;">Thao tác Quản trị</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-tbody">
+                            <tr><td colspan="7" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang truy xuất dữ liệu IAM...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal fade" id="userDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-light border-bottom-0 pt-4 px-4">
+                    <h5 class="modal-title fw-bold text-dark"><i class="bi bi-person-vcard me-2 text-primary"></i>Hồ sơ Tài khoản</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body px-4 pb-4">
+                    <div id="modalLoading" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải dữ liệu...</div>
+                    
+                    <div id="modalContent" class="d-none">
+                        <div class="text-center mb-4">
+                            <div class="avatar-sm mb-2" style="width: 64px; height: 64px; font-size: 1.5rem;" id="detailAvatar">U</div>
+                            <h5 class="fw-bold text-dark mb-1" id="detailUsername">username</h5>
+                            <div id="detailStatusBadge">--</div>
+                        </div>
+
+                        <div class="p-3 border rounded bg-light bg-opacity-50">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted small">Họ và tên (Fullname):</span>
+                                <span class="fw-semibold text-dark" id="detailFullname">--</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted small">Địa chỉ Email:</span>
+                                <span class="fw-semibold text-dark" id="detailEmail">--</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted small">Quyền hạn (Role):</span>
+                                <span class="fw-bold" id="detailRole">--</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted small">ID Doanh nghiệp liên kết:</span>
+                                <span class="fw-semibold font-monospace" id="detailTenant">--</span>
+                            </div>
+                            <div class="d-flex justify-content-between border-top pt-2 mt-2">
+                                <span class="text-muted small">Ngày tạo tài khoản:</span>
+                                <span class="small text-secondary" id="detailCreatedAt">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script>
+        let detailModal;
+        let allUsers = []; // Cache dữ liệu
+
+        document.addEventListener("DOMContentLoaded", () => {
+            // 1. GUARD: BẢO MẬT & ĐIỀU HƯỚNG TRANG ADMIN
+            const token = localStorage.getItem("access_token");
+            const userJson = localStorage.getItem("user");
+
+            if (!token || !userJson) {
+                window.location.href = "../login.html";
+                return;
+            }
+
+            const currentUser = JSON.parse(userJson);
+            const userRole = currentUser.role ? currentUser.role.name.toLowerCase() : "user";
+
+            if (userRole !== "admin") {
+                window.location.href = "../user/dashboard.html";
+                return;
+            }
+
+            // 2. KHỞI TẠO BIẾN VÀ GIAO DIỆN
+            detailModal = new bootstrap.Modal(document.getElementById('userDetailModal'));
+            
+            document.getElementById("nav-username").innerText = currentUser.username;
+            document.getElementById("nav-role").innerText = "QUẢN TRỊ VIÊN";
+
+            loadUsers();
+        });
+
+        // ==========================================
+        // CÁC HÀM XỬ LÝ DỮ LIỆU
+        // ==========================================
+
+        async function loadUsers() {
+            const tbody = document.getElementById("users-tbody");
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang đồng bộ dữ liệu IAM...</td></tr>';
+
+            try {
+                // Backend cần có endpoint GET /iam/users dành cho Admin
+                const response = await apiClient.fetch("/iam/users");
+                allUsers = Array.isArray(response) ? response : (response.data || []);
+
+                if (allUsers.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted">Hệ thống chưa có tài khoản người dùng nào.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = "";
+                allUsers.forEach(user => {
+                    // Xử lý Role Badge
+                    const rName = (user.role && user.role.name) ? user.role.name.toUpperCase() : "USER";
+                    const roleHtml = rName === "ADMIN" 
+                        ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle"><i class="bi bi-shield-lock-fill me-1"></i>ADMIN</span>`
+                        : `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle">USER</span>`;
+                    
+                    // Xử lý Tenant
+                    const tenantHtml = user.customer_id 
+                        ? `<span class="fw-semibold text-dark font-monospace">TENANT-${user.customer_id}</span>` 
+                        : `<span class="text-muted small">Không liên kết</span>`;
+
+                    // Lấy chữ cái đầu làm Avatar
+                    const initial = user.username.charAt(0).toUpperCase();
+
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td class="text-center fw-bold text-secondary border-end">#${user.id}</td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="avatar-sm me-3 bg-light text-primary border">${initial}</div>
+                                <div>
+                                    <div class="fw-bold text-dark">${user.username}</div>
+                                    <small class="text-muted">${user.email || 'Chưa cập nhật email'}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td>${roleHtml}</td>
+                        <td>${tenantHtml}</td>
+                        <td>${user.is_active ? utils.getStatusBadge('Active') : utils.getStatusBadge('Suspended')}</td>
+                        <td class="small text-muted">${user.last_login ? utils.formatDate(user.last_login, true) : 'Chưa đăng nhập'}</td>
+                        <td class="text-center">
+                            <div class="btn-group">
+                                <button onclick="viewUserDetails(${user.id})" class="btn btn-outline-primary action-btn" title="Hồ sơ chi tiết"><i class="bi bi-person-vcard"></i></button>
+                                <button onclick="mockIamAction('Chỉnh sửa User', 'Mở form cập nhật thông tin cho tài khoản ${user.username}')" class="btn btn-outline-dark action-btn" title="Sửa thông tin"><i class="bi bi-pencil-square"></i></button>
+                                <button onclick="mockResetPassword('${user.username}')" class="btn btn-outline-warning action-btn" title="Khôi phục Mật khẩu"><i class="bi bi-key"></i></button>
+                                ${user.is_active 
+                                    ? `<button onclick="mockToggleStatus('${user.username}', false)" class="btn btn-outline-secondary action-btn" title="Đình chỉ (Suspend)"><i class="bi bi-pause-circle"></i></button>`
+                                    : `<button onclick="mockToggleStatus('${user.username}', true)" class="btn btn-outline-success action-btn" title="Mở khóa (Activate)"><i class="bi bi-play-circle"></i></button>`
+                                }
+                                <button onclick="mockDeleteUser(${user.id}, '${user.username}')" class="btn btn-outline-danger action-btn" title="Xóa tài khoản"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error("Lỗi tải danh sách người dùng:", error);
+                // Hiển thị thông báo hướng dẫn cho Lab (Nếu chưa viết Backend)
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5">
+                    <div class="text-danger mb-2"><i class="bi bi-exclamation-triangle fs-3"></i></div>
+                    <h6 class="fw-bold">Lỗi kết nối API</h6>
+                    <p class="text-muted small mx-auto" style="max-width: 400px;">Hệ thống không thể gọi được endpoint <code>GET /iam/users</code>. Vui lòng đảm bảo bạn đã tạo file <strong>routes/iam.py</strong> trên Backend FastAPI.</p>
+                </td></tr>`;
+            }
+        }
+
+        function viewUserDetails(userId) {
+            // Lấy thông tin user từ cache allUsers
+            const user = allUsers.find(u => u.id === userId);
+            if (!user) return;
+
+            document.getElementById("modalLoading").classList.add("d-none");
+            document.getElementById("modalContent").classList.remove("d-none");
+
+            document.getElementById("detailAvatar").innerText = user.username.charAt(0).toUpperCase();
+            document.getElementById("detailUsername").innerText = user.username;
+            
+            document.getElementById("detailStatusBadge").innerHTML = user.is_active 
+                ? '<span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2">Hoạt động (Active)</span>' 
+                : '<span class="badge bg-secondary px-2">Bị đình chỉ (Suspended)</span>';
+
+            document.getElementById("detailFullname").innerText = user.full_name || 'Chưa cập nhật';
+            document.getElementById("detailEmail").innerText = user.email || 'Chưa cập nhật';
+            
+            const rName = (user.role && user.role.name) ? user.role.name.toUpperCase() : "USER";
+            document.getElementById("detailRole").innerHTML = rName === "ADMIN" ? '<span class="text-danger">Quản trị viên (ADMIN)</span>' : '<span class="text-primary">Khách hàng (USER)</span>';
+            
+            document.getElementById("detailTenant").innerText = user.customer_id ? `TENANT-${user.customer_id}` : "Hạ tầng Nội bộ";
+            document.getElementById("detailCreatedAt").innerText = user.created_at ? utils.formatDate(user.created_at, true) : 'N/A';
+
+            detailModal.show();
+        }
+
+        // ==========================================
+        // CÁC HÀM GIẢ LẬP GIAO DIỆN (MOCK ACTIONS)
+        // ==========================================
+
+        function mockIamAction(title, message) {
+            const alertBox = document.getElementById("action-alert");
+            alertBox.className = "alert alert-info py-2 shadow-sm border-info";
+            alertBox.innerHTML = `<i class="bi bi-shield-check me-2"></i><strong>[DEMO] ${title}:</strong> ${message}`;
+            alertBox.classList.remove("d-none");
+            window.scrollTo(0, 0);
+            setTimeout(() => { alertBox.classList.add("d-none"); }, 4000);
+        }
+
+        function mockResetPassword(username) {
+            if(confirm(`Yêu cầu hệ thống tự động sinh Mật khẩu mới và gửi về Email cho tài khoản [${username}]?`)) {
+                mockIamAction('Khôi phục mật khẩu', `Hệ thống đã tạo Mật khẩu tạm thời cho ${username}.`);
+            }
+        }
+
+        function mockToggleStatus(username, activate) {
+            const actionText = activate ? "MỞ KHÓA (Activate)" : "ĐÌNH CHỈ (Suspend)";
+            if(confirm(`Bạn có chắc chắn muốn ${actionText} tài khoản [${username}]?`)) {
+                mockIamAction('Thay đổi trạng thái', `Đã cập nhật trạng thái hoạt động cho tài khoản ${username}.`);
+            }
+        }
+
+        function mockDeleteUser(userId, username) {
+            if (confirm(`CẢNH BÁO QUẢN TRỊ VIÊN:\n\nHành động này sẽ XÓA VIỄN VIỄN tài khoản [${username}] khỏi cơ sở dữ liệu. Toàn bộ phiên đăng nhập sẽ bị đóng ngay lập tức.\n\nTiếp tục?`)) {
+                const alertBox = document.getElementById("action-alert");
+                alertBox.className = "alert alert-danger py-2 shadow-sm border-danger";
+                alertBox.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-2"></i>[DEMO] Đã chặn lệnh XÓA tài khoản <strong>${username}</strong> để bảo vệ dữ liệu nội bộ.`;
+                alertBox.classList.remove("d-none");
+                window.scrollTo(0, 0);
+                setTimeout(() => { alertBox.classList.add("d-none"); }, 4000);
+            }
+        }
+    </script>
+</body>
+</html>

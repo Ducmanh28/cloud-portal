@@ -86,7 +86,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div id="modalLoading" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang truy xuất thông tin từ NetBox...</div>
+                    <div id="modalLoading" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang truy xuất thông tin chi tiết...</div>
                     <div id="modalContent" class="d-none">
                         <h6 class="fw-bold text-secondary text-uppercase small mb-3 border-bottom pb-2">Thông tin phần cứng</h6>
                         <div class="row mb-4">
@@ -108,7 +108,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="interfaces-tbody">
-                                    </tbody>
+                                </tbody>
                             </table>
                         </div>
                     </div>
@@ -143,31 +143,45 @@
     <script src="../assets/js/api.js"></script>
     <script src="../assets/js/auth.js"></script>
     <script>
-        if (!localStorage.getItem("access_token")) window.location.href = "../login.html";
-
-        // Khởi tạo đối tượng Modal của Bootstrap để JS có thể gọi
         let detailModal;
         let monitorModal;
 
         document.addEventListener("DOMContentLoaded", () => {
+            // 1. CHỐT CHẶN BẢO MẬT: BẮT BUỘC PHẢI LÀ USER THƯỜNG
+            const token = localStorage.getItem("access_token");
+            const userJson = localStorage.getItem("user");
+
+            if (!token || !userJson) {
+                window.location.href = "../login.html";
+                return;
+            }
+
+            const currentUser = JSON.parse(userJson);
+            const userRole = currentUser.role ? currentUser.role.name.toLowerCase() : "user";
+
+            // KIỂM TRA: NẾU LÀ ADMIN, ĐÁ NGAY VỀ TRANG ADMIN
+            if (userRole === "admin") {
+                window.location.href = "../admin/dashboard.html";
+                return;
+            }
+
+            // 2. KHỞI TẠO GIAO DIỆN
             detailModal = new bootstrap.Modal(document.getElementById('deviceDetailModal'));
             monitorModal = new bootstrap.Modal(document.getElementById('monitorModal'));
 
-            const currentUser = utils.getCurrentUser();
-            if (currentUser) {
-                document.getElementById("nav-username").innerText = currentUser.username;
-                document.getElementById("nav-role").innerText = currentUser.role ? currentUser.role.name : "USER";
-            }
+            document.getElementById("nav-username").innerText = currentUser.username;
+            document.getElementById("nav-role").innerText = currentUser.role ? currentUser.role.name : "USER";
 
+            // 3. GỌI DỮ LIỆU
             loadDevices();
         });
 
         async function loadDevices() {
             const tbody = document.getElementById("devices-tbody");
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang đồng bộ từ NetBox...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang đồng bộ dữ liệu hạ tầng...</td></tr>';
 
             try {
-                // Gọi API lấy danh sách thiết bị. (Lưu ý: Backend cần cho phép User gọi API này)
+                // Backend đã được thiết kế để tự động nhận diện User hiện tại qua Token và lọc đúng Tenant
                 const response = await apiClient.fetch("/dcim/devices");
                 const devices = response.devices || [];
 
@@ -182,9 +196,9 @@
                     tr.innerHTML = `
                         <td class="text-center fw-bold text-secondary">#${dev.id}</td>
                         <td class="fw-semibold text-dark"><i class="bi bi-hdd-rack text-primary me-2"></i>${dev.name}</td>
-                        <td>${dev.device_type}</td>
-                        <td><span class="badge bg-secondary bg-opacity-10 text-secondary border">${dev.device_role}</span></td>
-                        <td class="font-monospace">${dev.primary_ip}</td>
+                        <td>${dev.device_type || 'N/A'}</td>
+                        <td><span class="badge bg-secondary bg-opacity-10 text-secondary border">${dev.device_role || 'N/A'}</span></td>
+                        <td class="font-monospace">${dev.primary_ip || 'Chưa cấu hình'}</td>
                         <td>${utils.getStatusBadge(dev.status)}</td>
                         <td class="text-center">
                             <button onclick="viewDeviceDetails(${dev.id}, '${dev.name}')" class="btn btn-sm btn-outline-primary py-0 px-2 me-1" title="Xem chi tiết">
@@ -199,29 +213,28 @@
                 });
             } catch (error) {
                 console.error("Lỗi tải danh sách thiết bị:", error);
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Lỗi kết nối hoặc bạn không có quyền xem thiết bị này.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Hệ thống bảo vệ từ chối truy cập hoặc lỗi kết nối mạng.</td></tr>`;
             }
         }
 
         async function viewDeviceDetails(deviceId, deviceName) {
-            // Mở modal và hiển thị trạng thái loading
             document.getElementById("modalDeviceName").innerText = deviceName;
             document.getElementById("modalLoading").classList.remove("d-none");
             document.getElementById("modalContent").classList.add("d-none");
             detailModal.show();
 
             try {
-                // Fetch chi tiết thiết bị bao gồm cả Interfaces từ NetBox
+                // Gọi API lấy chi tiết thiết bị của User
                 const dev = await apiClient.fetch(`/dcim/devices/${deviceId}`);
                 
-                // Đổ dữ liệu cơ bản
-                document.getElementById("detailType").innerText = dev.device_type;
-                document.getElementById("detailSerial").innerText = dev.serial;
-                document.getElementById("detailIP").innerText = dev.primary_ip;
-                // Nếu backend trả về thông tin site, cập nhật. Tạm dùng N/A nếu thiếu.
+                // Đổ dữ liệu cơ bản vào các field
+                document.getElementById("detailType").innerText = dev.device_type || "N/A";
+                document.getElementById("detailSerial").innerText = dev.serial || "N/A";
+                document.getElementById("detailIP").innerText = dev.primary_ip || "N/A";
+                // Thuộc tính Site không được trả về từ API backend, tạm thời gán cứng Data Center chính
                 document.getElementById("detailSite").innerText = "Data Center Chính";
 
-                // Đổ dữ liệu bảng Interfaces
+                // Đổ dữ liệu bảng Interfaces (Cổng mạng)
                 const ifTbody = document.getElementById("interfaces-tbody");
                 ifTbody.innerHTML = "";
                 
@@ -233,23 +246,23 @@
                         
                         ifTbody.innerHTML += `
                             <tr>
-                                <td class="fw-semibold">${intf.name}</td>
-                                <td>${intf.type}</td>
-                                <td class="font-monospace text-muted">${intf.mac_address}</td>
+                                <td class="fw-semibold">${intf.name || 'N/A'}</td>
+                                <td>${intf.type || 'N/A'}</td>
+                                <td class="font-monospace text-muted">${intf.mac_address || 'N/A'}</td>
                                 <td class="text-center">${statusIcon}</td>
                             </tr>
                         `;
                     });
                 } else {
-                    ifTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Không tìm thấy thông tin cổng kết nối</td></tr>';
+                    ifTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Không có thông tin cổng kết nối</td></tr>';
                 }
 
-                // Tắt loading, hiện content
+                // Hoàn tất tải dữ liệu, hiển thị nội dung
                 document.getElementById("modalLoading").classList.add("d-none");
                 document.getElementById("modalContent").classList.remove("d-none");
 
             } catch (error) {
-                document.getElementById("modalLoading").innerHTML = '<span class="text-danger">Không thể truy xuất dữ liệu chi tiết từ NetBox.</span>';
+                document.getElementById("modalLoading").innerHTML = '<span class="text-danger"><i class="bi bi-shield-x me-2"></i>Không thể truy xuất dữ liệu hoặc bạn không có quyền xem thiết bị này.</span>';
             }
         }
 

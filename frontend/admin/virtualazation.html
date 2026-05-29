@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Máy ảo toàn cục - Suncloud Admin Portal</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        body { padding-top: var(--navbar-height); }
+        .table-custom th { background-color: #f8f9fa; color: #495057; font-weight: 600; border-bottom: 2px solid #dee2e6; }
+        .power-btn { font-size: 0.85rem; padding: 0.25rem 0.5rem; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top navbar-custom shadow-sm">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="dashboard.html">
+                <i class="bi bi-hdd-network-fill fs-4 me-2 text-primary"></i> Suncloud Admin Portal
+            </a>
+            <div class="ms-auto d-flex align-items-center text-white">
+                <div class="me-3 text-end d-none d-sm-block">
+                    <div id="nav-username" class="fw-semibold">Đang tải...</div>
+                    <small id="nav-role" class="text-white-50 text-uppercase" style="font-size: 0.75rem;"></small>
+                </div>
+                <button onclick="window.logout()" class="btn btn-outline-light btn-sm fw-semibold px-3">
+                    <i class="bi bi-box-arrow-right me-1"></i> Đăng xuất
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+        <div class="sidebar sidebar-light">
+            <a href="dashboard.html"><i class="bi bi-speedometer2 me-2"></i> Tổng quan HT</a>
+            <a href="users.html"><i class="bi bi-people me-2"></i> Quản lý Người dùng</a>
+            <a href="my-vms.html" class="active"><i class="bi bi-pc-display me-2"></i> Quản lý Máy ảo</a>
+            <a href="dcim.html"><i class="bi bi-server me-2"></i> Hạ tầng Vật lý (DCIM)</a>
+            <a href="ipam.html"><i class="bi bi-diagram-3 me-2"></i> Quản lý Mạng (IPAM)</a>
+            <a href="billing.html"><i class="bi bi-building me-2"></i> Khách hàng & HĐ</a>
+        </div>
+
+        <main class="main-content">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h4 class="fw-bold text-dark mb-1">Quản trị Máy ảo (Virtualization)</h4>
+                    <p class="text-secondary small mb-0">Giám sát trạng thái, quản lý cấu hình và phân bổ tài nguyên VM trên toàn bộ các cụm Hypervisor.</p>
+                </div>
+                <div>
+                    <button onclick="mockAction('Khởi tạo Máy ảo', 'Hệ thống đang mở luồng cấp phát tự động (Provisioning) tài nguyên mới...')" class="btn btn-success btn-sm fw-semibold me-2">
+                        <i class="bi bi-plus-lg me-1"></i> Tạo máy ảo (Provision)
+                    </button>
+                    <button onclick="loadVMs()" class="btn btn-primary btn-sm fw-semibold">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Làm mới toàn cục
+                    </button>
+                </div>
+            </div>
+
+            <div id="action-alert" class="alert d-none py-2 shadow-sm border" role="alert"></div>
+
+            <div class="card card-custom shadow-sm border-0">
+                <div class="card-body p-0 table-responsive">
+                    <table class="table table-hover table-middle mb-0 table-custom">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 60px;">ID</th>
+                                <th>Tên Máy ảo</th>
+                                <th>Khách hàng (Tenant)</th>
+                                <th>Cụm Máy chủ (Node)</th>
+                                <th>Cấu hình (vCPU/RAM)</th>
+                                <th>Trạng thái</th>
+                                <th class="text-center" style="width: 320px;">Thao tác Quản trị</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vms-tbody">
+                            <tr><td colspan="7" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang đồng bộ dữ liệu hạ tầng ảo hóa...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal fade" id="vmDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-light border-bottom-0 pt-4 px-4">
+                    <h5 class="modal-title fw-bold text-dark" id="modalVmName">Đang tải...</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body px-4 pb-4">
+                    <div id="modalLoading" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang truy xuất thông tin chi tiết từ NetBox...</div>
+                    <div id="modalContent" class="d-none">
+                        <div class="row g-4 mb-4">
+                            <div class="col-md-6 border-end">
+                                <h6 class="fw-bold text-secondary text-uppercase small mb-3 border-bottom pb-2">Thông số Kỹ thuật & Chủ sở hữu</h6>
+                                <p class="mb-2"><span class="text-muted small">Khách hàng:</span> <span class="fw-bold text-primary ms-1" id="detailTenant">--</span></p>
+                                <p class="mb-2"><span class="text-muted small">Cụm Node (Host):</span> <span class="fw-semibold ms-1" id="detailCluster">--</span></p>
+                                <p class="mb-2"><span class="text-muted small">Số nhân CPU:</span> <span class="fw-semibold ms-1" id="detailCpu">-- vCPU</span></p>
+                                <p class="mb-2"><span class="text-muted small">Bộ nhớ RAM:</span> <span class="fw-semibold ms-1" id="detailRam">--</span></p>
+                                <p class="mb-2"><span class="text-muted small">Ổ cứng (Disk):</span> <span class="fw-semibold ms-1" id="detailDisk">-- GB</span></p>
+                                <p class="mb-2"><span class="text-muted small">Ghi chú:</span> <span class="text-muted small ms-1 fst-italic" id="detailComments">--</span></p>
+                            </div>
+                            <div class="col-md-6 ps-4">
+                                <h6 class="fw-bold text-secondary text-uppercase small mb-3 border-bottom pb-2">Mạng & Kết nối</h6>
+                                <p class="mb-2"><span class="text-muted small">IP Quản trị chính:</span> <span class="fw-bold ms-1 font-monospace text-success" id="detailIpPrimary">--</span></p>
+                                
+                                <h6 class="fw-bold text-secondary text-uppercase small mb-3 mt-4 border-bottom pb-2">Tác vụ khẩn cấp (NOC)</h6>
+                                <div class="d-grid gap-2">
+                                    <button onclick="mockAction('Force Stop', 'Đã ngắt điện đột ngột (Hard Power Off) máy ảo để xử lý sự cố.')" class="btn btn-outline-danger btn-sm fw-semibold">
+                                        <i class="bi bi-power me-2"></i>Cưỡng chế tắt nguồn (Force Stop)
+                                    </button>
+                                    <button onclick="mockAction('Web Console', 'Mở phiên VNC trực tiếp cấp độ Hypervisor.')" class="btn btn-outline-dark btn-sm fw-semibold">
+                                        <i class="bi bi-terminal me-2"></i>Mở Root Web Console
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h6 class="fw-bold text-secondary text-uppercase small mb-3"><i class="bi bi-ethernet me-2"></i>Cạc mạng Ảo (vNICs)</h6>
+                        <div class="table-responsive border rounded">
+                            <table class="table table-striped table-hover interface-table mb-0 small">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Tên cạc</th>
+                                        <th>Địa chỉ MAC</th>
+                                        <th class="text-center">Trạng thái Link</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="interfaces-tbody">
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="monitorModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title fw-bold" id="monitorVmName">Live System Monitor: --</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center p-5">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h5 class="fw-bold text-dark">Đang khởi tạo kết nối Agent...</h5>
+                    <p class="text-muted small mt-3 mb-0">Hệ thống đang thiết lập luồng telemetry tới Hypervisor để trích xuất biểu đồ CPU, RAM và Network I/O.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script>
+        let detailModal;
+        let monitorModal;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            // 1. CHỐT CHẶN BẢO MẬT ADMIN
+            const token = localStorage.getItem("access_token");
+            const userJson = localStorage.getItem("user");
+
+            if (!token || !userJson) {
+                window.location.href = "../login.html";
+                return;
+            }
+
+            const currentUser = JSON.parse(userJson);
+            const userRole = currentUser.role ? currentUser.role.name.toLowerCase() : "user";
+
+            if (userRole !== "admin") {
+                window.location.href = "../user/dashboard.html"; // Đá User thường về luồng của họ
+                return;
+            }
+
+            // 2. KHỞI TẠO BIẾN VÀ GIAO DIỆN
+            detailModal = new bootstrap.Modal(document.getElementById('vmDetailModal'));
+            monitorModal = new bootstrap.Modal(document.getElementById('monitorModal'));
+
+            document.getElementById("nav-username").innerText = currentUser.username;
+            document.getElementById("nav-role").innerText = "QUẢN TRỊ VIÊN";
+
+            loadVMs();
+        });
+
+        // ==========================================
+        // CÁC HÀM XỬ LÝ DỮ LIỆU CHÍNH (GỌI THẬT)
+        // ==========================================
+
+        async function loadVMs() {
+            const tbody = document.getElementById("vms-tbody");
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang đồng bộ dữ liệu ảo hóa...</td></tr>';
+
+            try {
+                // Gọi API ảo hóa với quyền Admin (Sẽ trả về toàn bộ VM)
+                const response = await apiClient.fetch("/virtualization/vms");
+                const vms = response.vms || [];
+
+                if (vms.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted">Chưa có máy ảo nào trên hệ thống cụm ảo hóa.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = "";
+                vms.forEach(vm => {
+                    const isRunning = vm.status.toLowerCase() === 'active' || vm.status.toLowerCase() === 'running';
+                    
+                    // Nút Điều khiển Nguồn THỰC TẾ
+                    const powerButton = isRunning 
+                        ? `<button onclick="powerAction(${vm.id}, 'stop')" class="btn btn-outline-danger power-btn me-1" title="Tắt (Graceful Stop)"><i class="bi bi-stop-fill"></i></button>
+                           <button onclick="powerAction(${vm.id}, 'restart')" class="btn btn-outline-warning power-btn me-1" title="Khởi động lại (Restart)"><i class="bi bi-arrow-clockwise"></i></button>`
+                        : `<button onclick="powerAction(${vm.id}, 'start')" class="btn btn-outline-success power-btn me-1" title="Bật lên (Start)"><i class="bi bi-play-fill"></i></button>`;
+
+                    // Nhận diện Tenant & Cụm
+                    const tenantHtml = (vm.tenant && vm.tenant !== 'None') 
+                        ? `<span class="fw-bold text-primary">${vm.tenant}</span>` 
+                        : `<span class="badge bg-secondary bg-opacity-10 text-secondary">Nội bộ (Internal)</span>`;
+                    
+                    const clusterHtml = `<span class="fw-semibold text-dark"><i class="bi bi-diagram-3 me-1"></i>${vm.cluster || 'Unassigned'}</span>`;
+
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td class="text-center fw-bold text-secondary border-end">#${vm.id}</td>
+                        <td>
+                            <div class="fw-bold text-dark"><i class="bi bi-pc-display text-primary me-2"></i>${vm.name || 'Unnamed'}</div>
+                            <small class="font-monospace text-muted">${vm.primary_ip || 'No IP'}</small>
+                        </td>
+                        <td>${tenantHtml}</td>
+                        <td>${clusterHtml}</td>
+                        <td><span class="badge bg-light text-dark border">${vm.vcpus || 0} Core</span> / <span class="badge bg-light text-dark border">${utils.formatRAM(vm.memory_mb || 0)}</span></td>
+                        <td>${utils.getStatusBadge(vm.status)}</td>
+                        <td class="text-center">
+                            ${powerButton}
+                            <div class="btn-group ms-1">
+                                <button onclick="viewVmDetails(${vm.id}, '${vm.name}')" class="btn btn-outline-primary power-btn" title="Cấu hình chi tiết"><i class="bi bi-info-circle"></i></button>
+                                <button onclick="mockAction('Sửa thông số', 'Mở form chỉnh sửa vCPU/RAM/Disk cho ${vm.name}')" class="btn btn-outline-dark power-btn" title="Sửa cấu hình (Edit)"><i class="bi bi-pencil-square"></i></button>
+                                <button onclick="mockAction('Live Migration', 'Khởi tạo luồng di chuyển trực tiếp ${vm.name} sang Node khác mà không gây downtime.')" class="btn btn-outline-info power-btn" title="Di chuyển cụm (Migrate)"><i class="bi bi-arrows-move"></i></button>
+                                <button onclick="mockDeleteVM(${vm.id}, '${vm.name}')" class="btn btn-outline-secondary power-btn" title="Hủy máy ảo (Terminate)"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error("Lỗi tải danh sách VM:", error);
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Lỗi kết nối API lấy danh sách máy ảo toàn cục.</td></tr>`;
+            }
+        }
+
+        async function powerAction(vmId, action) {
+            const alertBox = document.getElementById("action-alert");
+            if (!confirm(`XÁC NHẬN ADMIN:\nBạn đang can thiệp nguồn máy ảo. Lệnh [${action.toUpperCase()}] có thể ảnh hưởng dịch vụ Khách hàng. Tiếp tục?`)) return;
+
+            try {
+                // Gọi API thực để bật tắt
+                await apiClient.fetch(`/virtualization/vms/${vmId}/power`, {
+                    method: "POST",
+                    body: JSON.stringify({ action: action })
+                });
+
+                alertBox.className = "alert alert-success py-2 shadow-sm border-success";
+                alertBox.innerHTML = `<i class="bi bi-check-circle-fill me-2"></i>Lệnh <strong>${action.toUpperCase()}</strong> đã được gửi tới máy chủ thành công.`;
+                alertBox.classList.remove("d-none");
+                
+                setTimeout(() => { alertBox.classList.add("d-none"); loadVMs(); }, 2000);
+
+            } catch (error) {
+                alertBox.className = "alert alert-danger py-2 shadow-sm border-danger";
+                alertBox.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-2"></i>Lỗi thao tác điều khiển nguồn: ${error.message}`;
+                alertBox.classList.remove("d-none");
+            }
+        }
+
+        async function viewVmDetails(vmId, vmName) {
+            document.getElementById("modalVmName").innerText = vmName;
+            document.getElementById("modalLoading").classList.remove("d-none");
+            document.getElementById("modalContent").classList.add("d-none");
+            detailModal.show();
+
+            try {
+                const vm = await apiClient.fetch(`/virtualization/vms/${vmId}`);
+                
+                // Đổ dữ liệu Panel Cấu hình
+                document.getElementById("detailTenant").innerText = (vm.tenant && vm.tenant !== 'None') ? vm.tenant : "Hệ thống nội bộ";
+                document.getElementById("detailCluster").innerText = vm.cluster || 'Mặc định';
+                document.getElementById("detailCpu").innerText = `${vm.vcpus || 0} vCPU`;
+                document.getElementById("detailRam").innerText = utils.formatRAM(vm.memory_mb || 0);
+                document.getElementById("detailDisk").innerText = `${vm.disk_gb || 0} GB`;
+                document.getElementById("detailComments").innerText = vm.comments || 'Không có ghi chú';
+                
+                // Đổ dữ liệu IP
+                document.getElementById("detailIpPrimary").innerText = vm.primary_ip || 'Chưa cấp IP';
+
+                // Đổ danh sách vNICs (Interfaces)
+                const ifTbody = document.getElementById("interfaces-tbody");
+                ifTbody.innerHTML = "";
+                
+                if (vm.interfaces && vm.interfaces.length > 0) {
+                    vm.interfaces.forEach(intf => {
+                        const statusIcon = intf.enabled 
+                            ? '<span class="badge bg-success bg-opacity-10 text-success border border-success-subtle">Connected</span>' 
+                            : '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle">Disconnected</span>';
+                        
+                        ifTbody.innerHTML += `
+                            <tr>
+                                <td class="fw-semibold text-dark">${intf.name || 'N/A'}</td>
+                                <td class="font-monospace text-muted">${intf.mac_address || 'N/A'}</td>
+                                <td class="text-center">${statusIcon}</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    ifTbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Không tìm thấy vNIC nào.</td></tr>';
+                }
+
+                document.getElementById("modalLoading").classList.add("d-none");
+                document.getElementById("modalContent").classList.remove("d-none");
+
+            } catch (error) {
+                document.getElementById("modalLoading").innerHTML = '<span class="text-danger">Không thể truy xuất thông tin cấu hình chi tiết từ Backend/NetBox.</span>';
+            }
+        }
+
+        function openMonitorModal(vmName) {
+            document.getElementById("monitorVmName").innerText = `Live System Monitor: ${vmName}`;
+            monitorModal.show();
+        }
+
+        // ==========================================
+        // CÁC HÀM GIẢ LẬP GIAO DIỆN ADMIN (MOCK)
+        // ==========================================
+        
+        function mockAction(title, message) {
+            const alertBox = document.getElementById("action-alert");
+            alertBox.className = "alert alert-info py-2 shadow-sm border-info";
+            alertBox.innerHTML = `<i class="bi bi-info-circle-fill me-2"></i><strong>[DEMO] ${title}:</strong> ${message}`;
+            alertBox.classList.remove("d-none");
+            window.scrollTo(0, 0);
+            setTimeout(() => { alertBox.classList.add("d-none"); }, 4000);
+        }
+
+        function mockDeleteVM(vmId, vmName) {
+            if (confirm(`CẢNH BÁO QUẢN TRỊ:\n\nHành động này sẽ Terminate (Xóa vĩnh viễn) máy ảo [${vmName}] khỏi ổ cứng lưu trữ. Dữ liệu của khách hàng sẽ bị mất trắng.\n\nĐây là bản Demo, bạn có muốn tiếp tục chạy lệnh mô phỏng?`)) {
+                const alertBox = document.getElementById("action-alert");
+                alertBox.className = "alert alert-danger py-2 shadow-sm border-danger";
+                alertBox.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-2"></i>[DEMO] Lệnh XÓA máy ảo ${vmName} đã bị chặn bởi hệ thống bảo vệ.`;
+                alertBox.classList.remove("d-none");
+                window.scrollTo(0, 0);
+                setTimeout(() => { alertBox.classList.add("d-none"); }, 4000);
+            }
+        }
+    </script>
+</body>
+</html>

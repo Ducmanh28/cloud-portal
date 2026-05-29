@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Hạ tầng Vật lý (DCIM) - Suncloud Admin Portal</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        body { padding-top: var(--navbar-height); }
+        .table-custom th { background-color: #f8f9fa; color: #495057; font-weight: 600; border-bottom: 2px solid #dee2e6; }
+        .action-btn { font-size: 0.85rem; padding: 0.25rem 0.5rem; }
+        .interface-table th, .interface-table td { font-size: 0.85rem; padding: 0.5rem; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top navbar-custom shadow-sm">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="dashboard.html">
+                <i class="bi bi-hdd-network-fill fs-4 me-2 text-primary"></i> Suncloud Admin Portal
+            </a>
+            <div class="ms-auto d-flex align-items-center text-white">
+                <div class="me-3 text-end d-none d-sm-block">
+                    <div id="nav-username" class="fw-semibold">Đang tải...</div>
+                    <small id="nav-role" class="text-white-50 text-uppercase" style="font-size: 0.75rem;"></small>
+                </div>
+                <button onclick="window.logout()" class="btn btn-outline-light btn-sm fw-semibold px-3">
+                    <i class="bi bi-box-arrow-right me-1"></i> Đăng xuất
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+        <div class="sidebar sidebar-light">
+            <a href="dashboard.html"><i class="bi bi-speedometer2 me-2"></i> Tổng quan HT</a>
+            <a href="my-vms.html"><i class="bi bi-pc-display me-2"></i> Quản lý Máy ảo</a>
+            <a href="dcim.html" class="active"><i class="bi bi-server me-2"></i> Hạ tầng Vật lý (DCIM)</a>
+            <a href="billing.html"><i class="bi bi-building me-2"></i> Khách hàng & HĐ</a>
+        </div>
+
+        <main class="main-content">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h4 class="fw-bold text-dark mb-1">Quản lý Thiết bị Phần cứng (DCIM)</h4>
+                    <p class="text-secondary small mb-0">Quản lý toàn bộ máy chủ Bare-metal, Router, Switch và vị trí lắp đặt trên toàn Data Center.</p>
+                </div>
+                <div>
+                    <button onclick="mockAction('Thêm thiết bị mới', 'Hệ thống đang mở form khởi tạo thiết bị lên NetBox...')" class="btn btn-success btn-sm fw-semibold me-2">
+                        <i class="bi bi-plus-lg me-1"></i> Thêm Thiết bị
+                    </button>
+                    <button onclick="loadDevices()" class="btn btn-primary btn-sm fw-semibold">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Làm mới
+                    </button>
+                </div>
+            </div>
+
+            <div id="action-alert" class="alert d-none py-2 shadow-sm" role="alert"></div>
+
+            <div class="card card-custom shadow-sm border-0">
+                <div class="card-body p-0 table-responsive">
+                    <table class="table table-hover table-middle mb-0 table-custom">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 60px;">ID</th>
+                                <th>Thiết bị & Loại</th>
+                                <th>Khách hàng (Tenant)</th>
+                                <th>Vị trí (Site/Rack)</th>
+                                <th>IP Quản trị</th>
+                                <th>Trạng thái</th>
+                                <th class="text-center" style="width: 260px;">Thao tác Quản trị</th>
+                            </tr>
+                        </thead>
+                        <tbody id="devices-tbody">
+                            <tr><td colspan="7" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang đồng bộ dữ liệu toàn hệ thống...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal fade" id="deviceDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-light border-bottom-0 pt-4 px-4">
+                    <h5 class="modal-title fw-bold text-dark" id="modalDeviceName">Đang tải...</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body px-4 pb-4">
+                    <div id="modalLoading" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang truy xuất thông tin từ NetBox...</div>
+                    
+                    <div id="modalContent" class="d-none">
+                        <div class="row g-4 mb-4">
+                            <div class="col-md-6">
+                                <div class="p-3 border rounded h-100 bg-light bg-opacity-50">
+                                    <h6 class="fw-bold text-secondary text-uppercase small mb-3"><i class="bi bi-info-circle me-2"></i>Thông tin cấu hình</h6>
+                                    <div class="mb-2"><span class="text-muted small d-inline-block" style="width: 90px;">Loại/Model:</span> <span class="fw-semibold text-dark" id="detailType">--</span></div>
+                                    <div class="mb-2"><span class="text-muted small d-inline-block" style="width: 90px;">Vai trò:</span> <span class="fw-semibold text-dark" id="detailRole">--</span></div>
+                                    <div class="mb-2"><span class="text-muted small d-inline-block" style="width: 90px;">Số Serial:</span> <span class="fw-semibold font-monospace" id="detailSerial">--</span></div>
+                                    <div class="mb-0"><span class="text-muted small d-inline-block" style="width: 90px;">Khách hàng:</span> <span class="fw-bold text-primary" id="detailTenant">--</span></div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="p-3 border rounded h-100 bg-light bg-opacity-50">
+                                    <h6 class="fw-bold text-secondary text-uppercase small mb-3"><i class="bi bi-geo-alt me-2"></i>Vị trí & Kết nối</h6>
+                                    <div class="mb-2"><span class="text-muted small d-inline-block" style="width: 80px;">Data Center:</span> <span class="fw-semibold text-dark" id="detailSite">--</span></div>
+                                    <div class="mb-2"><span class="text-muted small d-inline-block" style="width: 80px;">Tủ Rack:</span> <span class="fw-semibold text-dark" id="detailRack">--</span></div>
+                                    <div class="mb-2"><span class="text-muted small d-inline-block" style="width: 80px;">Vị trí (U):</span> <span class="fw-semibold text-dark" id="detailPosition">--</span></div>
+                                    <div class="mb-0"><span class="text-muted small d-inline-block" style="width: 80px;">IP Chính:</span> <span class="fw-bold font-monospace text-success" id="detailIP">--</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h6 class="fw-bold text-secondary text-uppercase small mb-3"><i class="bi bi-ethernet me-2"></i>Danh sách Cổng mạng (Interfaces)</h6>
+                        <div class="table-responsive border rounded">
+                            <table class="table table-striped table-hover interface-table mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Tên cổng</th>
+                                        <th>Loại (Type)</th>
+                                        <th>MAC Address</th>
+                                        <th class="text-center">Trạng thái</th>
+                                        <th class="text-center">Tác vụ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="interfaces-tbody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="monitorModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title fw-bold" id="monitorDeviceName">Live Monitor: --</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center p-5">
+                    <div class="spinner-grow text-success mb-3" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h5 class="fw-bold text-dark">Đang kết nối luồng SNMP/Telemetry...</h5>
+                    <p class="text-muted small mt-3 mb-0">Hệ thống đang khởi tạo kết nối để lấy biểu đồ Network I/O, Nhiệt độ và Nguồn điện theo thời gian thực.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../assets/js/utils.js"></script>
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script>
+        let detailModal;
+        let monitorModal;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            // 1. GUARD: BẢO MẬT & ĐIỀU HƯỚNG TRANG ADMIN
+            const token = localStorage.getItem("access_token");
+            const userJson = localStorage.getItem("user");
+
+            if (!token || !userJson) {
+                window.location.href = "../login.html";
+                return;
+            }
+
+            const currentUser = JSON.parse(userJson);
+            const userRole = currentUser.role ? currentUser.role.name.toLowerCase() : "user";
+
+            if (userRole !== "admin") {
+                window.location.href = "../user/dashboard.html"; // Đá User về trang của họ
+                return;
+            }
+
+            // 2. KHỞI TẠO BIẾN VÀ GIAO DIỆN
+            detailModal = new bootstrap.Modal(document.getElementById('deviceDetailModal'));
+            monitorModal = new bootstrap.Modal(document.getElementById('monitorModal'));
+
+            document.getElementById("nav-username").innerText = currentUser.username;
+            document.getElementById("nav-role").innerText = "QUẢN TRỊ VIÊN";
+
+            loadDevices();
+        });
+
+        // ==========================================
+        // CÁC HÀM XỬ LÝ DỮ LIỆU THẬT
+        // ==========================================
+
+        async function loadDevices() {
+            const tbody = document.getElementById("devices-tbody");
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang đồng bộ dữ liệu toàn hệ thống...</td></tr>';
+
+            try {
+                // Admin API sẽ trả về toàn bộ thiết bị (không filter theo tenant)
+                const response = await apiClient.fetch("/dcim/devices");
+                const devices = response.devices || [];
+
+                if (devices.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted">Hệ thống chưa có thiết bị vật lý nào.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = "";
+                devices.forEach(dev => {
+                    const tenantHtml = (dev.tenant && dev.tenant !== 'N/A' && dev.tenant !== 'None') 
+                                        ? `<span class="fw-bold text-primary">${dev.tenant}</span>` 
+                                        : `<span class="badge bg-secondary bg-opacity-10 text-secondary">Nội bộ (Internal)</span>`;
+                    
+                    const positionHtml = `${dev.site || 'Unknown'} <br><small class="text-muted">Rack: ${dev.rack || 'N/A'}</small>`;
+
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td class="text-center fw-bold text-secondary border-end">#${dev.id}</td>
+                        <td>
+                            <div class="fw-bold text-dark"><i class="bi bi-hdd-rack text-primary me-2"></i>${dev.name || 'Unnamed'}</div>
+                            <small class="text-muted">${dev.device_type || 'N/A'} - ${dev.device_role || 'N/A'}</small>
+                        </td>
+                        <td>${tenantHtml}</td>
+                        <td>${positionHtml}</td>
+                        <td class="font-monospace">${dev.primary_ip || 'Chưa cấu hình'}</td>
+                        <td>${utils.getStatusBadge(dev.status)}</td>
+                        <td class="text-center">
+                            <div class="btn-group">
+                                <button onclick="viewDeviceDetails(${dev.id}, '${dev.name}')" class="btn btn-outline-primary action-btn" title="Xem chi tiết"><i class="bi bi-info-circle"></i></button>
+                                <button onclick="mockAction('Chỉnh sửa thiết bị', 'Mở form chỉnh sửa thông số cho thiết bị ${dev.name}')" class="btn btn-outline-dark action-btn" title="Chỉnh sửa thông tin"><i class="bi bi-pencil-square"></i></button>
+                                <button onclick="mockAction('Di chuyển thiết bị', 'Mở giao diện chọn Site/Rack mới cho thiết bị ${dev.name}')" class="btn btn-outline-warning action-btn" title="Đổi vị trí (Move)"><i class="bi bi-arrows-move"></i></button>
+                                <button onclick="openMonitorModal('${dev.name}')" class="btn btn-outline-success action-btn" title="Giám sát SNMP"><i class="bi bi-activity"></i></button>
+                                <button onclick="mockDeleteDevice(${dev.id}, '${dev.name}')" class="btn btn-outline-danger action-btn" title="Xóa thiết bị"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error("Lỗi tải danh sách thiết bị:", error);
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Lỗi kết nối NetBox API. Vui lòng kiểm tra backend.</td></tr>`;
+            }
+        }
+
+        async function viewDeviceDetails(deviceId, deviceName) {
+            document.getElementById("modalDeviceName").innerText = deviceName;
+            document.getElementById("modalLoading").classList.remove("d-none");
+            document.getElementById("modalContent").classList.add("d-none");
+            detailModal.show();
+
+            try {
+                // Fetch chi tiết thiết bị từ Backend (Đã vượt qua hàm check Admin)
+                const dev = await apiClient.fetch(`/dcim/devices/${deviceId}`);
+                
+                // Đổ dữ liệu Panel Cấu hình
+                document.getElementById("detailType").innerText = dev.device_type || "N/A";
+                document.getElementById("detailRole").innerText = dev.device_role || "N/A";
+                document.getElementById("detailSerial").innerText = dev.serial || "N/A";
+                
+                // Panel Vị trí
+                document.getElementById("detailSite").innerText = dev.site || "N/A";
+                document.getElementById("detailRack").innerText = dev.rack || "N/A";
+                document.getElementById("detailPosition").innerText = dev.position ? `U${dev.position}` : "N/A";
+                
+                // Mạng & Khách hàng
+                document.getElementById("detailIP").innerText = dev.primary_ip || "N/A";
+                document.getElementById("detailTenant").innerText = (dev.tenant && dev.tenant !== 'None') ? dev.tenant : "Hạ tầng Nội bộ";
+
+                // Xử lý Bảng Interfaces (Cổng mạng)
+                const ifTbody = document.getElementById("interfaces-tbody");
+                ifTbody.innerHTML = "";
+                
+                if (dev.interfaces && dev.interfaces.length > 0) {
+                    dev.interfaces.forEach(intf => {
+                        const statusIcon = intf.enabled 
+                            ? '<i class="bi bi-circle-fill text-success" style="font-size:0.6rem;"></i> Up' 
+                            : '<i class="bi bi-circle-fill text-danger" style="font-size:0.6rem;"></i> Down';
+                        
+                        const actionHtml = intf.enabled 
+                            ? `<button onclick="mockAction('Tắt cổng', 'Đã gửi lệnh Shutdown xuống cổng ${intf.name}')" class="btn btn-sm btn-outline-danger py-0 px-2" title="Shutdown Port"><i class="bi bi-power"></i></button>`
+                            : `<button onclick="mockAction('Bật cổng', 'Đã gửi lệnh No Shutdown xuống cổng ${intf.name}')" class="btn btn-sm btn-outline-success py-0 px-2" title="Enable Port"><i class="bi bi-play-fill"></i></button>`;
+
+                        ifTbody.innerHTML += `
+                            <tr>
+                                <td class="fw-semibold text-dark">${intf.name || 'N/A'}</td>
+                                <td>${intf.type || 'N/A'}</td>
+                                <td class="font-monospace text-muted">${intf.mac_address || 'N/A'}</td>
+                                <td class="text-center">${statusIcon}</td>
+                                <td class="text-center">${actionHtml}</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    ifTbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Không có thông tin cổng kết nối</td></tr>';
+                }
+
+                document.getElementById("modalLoading").classList.add("d-none");
+                document.getElementById("modalContent").classList.remove("d-none");
+
+            } catch (error) {
+                document.getElementById("modalLoading").innerHTML = '<span class="text-danger"><i class="bi bi-shield-x me-2"></i>Không thể truy xuất dữ liệu từ hệ thống NetBox.</span>';
+            }
+        }
+
+        // ==========================================
+        // CÁC HÀM GIẢ LẬP GIAO DIỆN (MOCK FEATURES)
+        // ==========================================
+
+        function mockAction(title, message) {
+            const alertBox = document.getElementById("action-alert");
+            alertBox.className = "alert alert-info py-2 shadow-sm border-info";
+            alertBox.innerHTML = `<i class="bi bi-info-circle-fill me-2"></i><strong>[DEMO] ${title}:</strong> ${message}`;
+            alertBox.classList.remove("d-none");
+            window.scrollTo(0, 0); // Cuộn lên đầu để xem thông báo
+            setTimeout(() => { alertBox.classList.add("d-none"); }, 4000);
+        }
+
+        function mockDeleteDevice(deviceId, deviceName) {
+            if (confirm(`CẢNH BÁO QUẢN TRỊ VIÊN:\n\nBạn đang chuẩn bị XÓA THIẾT BỊ VẬT LÝ [${deviceName}] khỏi hệ thống NetBox. Toàn bộ dây cáp, IP và máy ảo liên kết sẽ bị mồ côi.\n\nĐây là thao tác Demo, bạn có muốn tiếp tục?`)) {
+                const alertBox = document.getElementById("action-alert");
+                alertBox.className = "alert alert-danger py-2 shadow-sm border-danger";
+                alertBox.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-2"></i>[DEMO] Đã chặn lệnh XÓA thiết bị <strong>${deviceName}</strong> để bảo vệ dữ liệu Lab.`;
+                alertBox.classList.remove("d-none");
+                window.scrollTo(0, 0);
+                setTimeout(() => { alertBox.classList.add("d-none"); }, 4000);
+            }
+        }
+
+        function openMonitorModal(deviceName) {
+            document.getElementById("monitorDeviceName").innerText = `SNMP Monitor: ${deviceName}`;
+            monitorModal.show();
+        }
+    </script>
+</body>
+</html>
