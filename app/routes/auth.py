@@ -48,6 +48,30 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
     return user
 
+
+def build_user_payload(user: models.User) -> dict:
+    """Trả về thông tin user tối thiểu cho frontend điều hướng đúng role."""
+    return {
+        "id": user.id,
+        "username": user.username,
+        "is_active": user.is_active,
+        "role_id": user.role_id,
+        "customer_id": user.customer_id,
+        "role": {
+            "id": user.role.id,
+            "name": user.role.name,
+        } if user.role else None,
+        "customer": {
+            "id": user.customer.id,
+            "tenant_slug": user.customer.tenant_slug,
+            "company_name": user.customer.company_name,
+            "tax_code": user.customer.tax_code,
+            "address": user.customer.address,
+            "contact_person": user.customer.contact_person,
+            "status": user.customer.status,
+        } if user.customer else None,
+    }
+
 # ==========================================
 # API ENDPOINTS
 # ==========================================
@@ -64,12 +88,18 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Tài khoản đã bị khóa")
 
+    role_name = user.role.name.upper() if user.role else "USER"
+
     # Sử dụng utils.create_access_token
     access_token = utils.create_access_token(
-        data={"sub": str(user.id)}, 
+        data={"sub": str(user.id), "role": role_name}, 
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": build_user_payload(user),
+    }
 
 @router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
