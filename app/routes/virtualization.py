@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Optional
 from sqlalchemy.orm import Session
-from ..database import get_db # Đảm bảo import get_db để truy vấn nếu cần
 
 # Import từ thư mục cha
+from ..database import get_db
 from .. import models, utils
 from ..netbox_client import nb_client
 
@@ -13,27 +13,31 @@ router = APIRouter(prefix="/api/v1/virtualization", tags=["Virtualization (VMs &
 # 1. API: QUẢN LÝ CỤM ẢO HÓA (CLUSTERS)
 # ==========================================
 @router.get("/clusters")
-def get_clusters(current_user: models.User = Depends(utils.get_current_user), db: Session = Depends(get_db)):
+def get_clusters(
+    current_user: models.User = Depends(utils.get_current_user), 
+    db: Session = Depends(get_db)
+):
     """
     [ADMIN] Lấy danh sách các cụm máy chủ ảo hóa.
     Chỉ Quản trị viên hệ thống mới được phép xem tài nguyên hạ tầng lõi này.
     """
-    # Bảo vệ API bằng cách check quyền trực tiếp thay vì bẫy hàm require_admin riêng lẻ
-    user_role = current_user.role.name.lower() if current_user.role else "user"
-    if user_role != "admin":
+    # Đồng bộ hóa chuẩn kiểm tra quyền Admin (.upper())
+    user_role = current_user.role.name.upper() if current_user.role else "USER"
+    if user_role != "ADMIN":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập tài nguyên này.")
 
     try:
         clusters = nb_client.virtualization.clusters.all()
         results = []
         for cluster in clusters:
+            # Sử dụng getattr để bẫy lỗi an toàn khi NetBox trả về null/missing field
             results.append({
                 "id": cluster.id,
                 "name": cluster.name,
-                "type": cluster.type.name if cluster.type else "Unknown",
-                "status": cluster.status.value if cluster.status else "Unknown",
-                "site": cluster.site.name if cluster.site else "N/A",
-                "tenant": cluster.tenant.name if cluster.tenant else "Internal"
+                "type": cluster.type.name if getattr(cluster, 'type', None) else "Unknown",
+                "status": cluster.status.value if getattr(cluster, 'status', None) else "Unknown",
+                "site": cluster.site.name if getattr(cluster, 'site', None) else "N/A",
+                "tenant": cluster.tenant.name if getattr(cluster, 'tenant', None) else "Internal"
             })
         return {"total": len(results), "clusters": results}
     except Exception as e:
@@ -53,11 +57,10 @@ def get_vms(
     [USER]: Chỉ lấy các máy ảo thuộc về đúng công ty của họ.
     """
     try:
-        # CHUẨN HÓA: Ép chuỗi về chữ thường để khớp với 'admin' trong MySQL
-        user_role = current_user.role.name.lower() if current_user.role else "user"
+        user_role = current_user.role.name.upper() if current_user.role else "USER"
         query_params = {}
 
-        if user_role == "admin":
+        if user_role == "ADMIN":
             if tenant_slug:
                 query_params['tenant'] = tenant_slug
         else:
@@ -77,13 +80,13 @@ def get_vms(
             results.append({
                 "id": vm.id,
                 "name": vm.name,
-                "status": vm.status.value if vm.status else "Unknown",
-                "cluster": vm.cluster.name if vm.cluster else "Unassigned",
-                "tenant": vm.tenant.name if vm.tenant else "None",
-                "vcpus": int(vm.vcpus) if vm.vcpus else 0,
-                "memory_mb": int(vm.memory) if vm.memory else 0,
-                "disk_gb": int(vm.disk) if vm.disk else 0,
-                "primary_ip": vm.primary_ip.address if vm.primary_ip else "N/A"
+                "status": vm.status.value if getattr(vm, 'status', None) else "Unknown",
+                "cluster": vm.cluster.name if getattr(vm, 'cluster', None) else "Unassigned",
+                "tenant": vm.tenant.name if getattr(vm, 'tenant', None) else "None",
+                "vcpus": int(vm.vcpus) if getattr(vm, 'vcpus', None) else 0,
+                "memory_mb": int(vm.memory) if getattr(vm, 'memory', None) else 0,
+                "disk_gb": int(vm.disk) if getattr(vm, 'disk', None) else 0,
+                "primary_ip": vm.primary_ip.address if getattr(vm, 'primary_ip', None) else "N/A"
             })
             
         return {"total": len(results), "vms": results}
@@ -104,11 +107,10 @@ def get_vm_details(
         if not vm:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy máy ảo.")
 
-        # CHUẨN HÓA: Ép chuỗi về chữ thường để tránh lỗi chặn quyền Admin khi xem chi tiết
-        user_role = current_user.role.name.lower() if current_user.role else "user"
+        user_role = current_user.role.name.upper() if current_user.role else "USER"
         
         # BẢO MẬT: Kiểm tra quyền sở hữu nếu là USER thường
-        if user_role != "admin":
+        if user_role != "ADMIN":
             my_tenant = current_user.customer.tenant_slug if current_user.customer else None
             if not my_tenant or getattr(vm, 'tenant', None) is None or vm.tenant.slug != my_tenant:
                 raise HTTPException(
@@ -128,13 +130,13 @@ def get_vm_details(
         return {
             "id": vm.id,
             "name": vm.name,
-            "status": vm.status.value if vm.status else "Unknown",
-            "cluster": vm.cluster.name if vm.cluster else "Unassigned",
-            "tenant": vm.tenant.name if vm.tenant else "None",
-            "vcpus": int(vm.vcpus) if vm.vcpus else 0,
-            "memory_mb": int(vm.memory) if vm.memory else 0,
-            "disk_gb": int(vm.disk) if vm.disk else 0,
-            "primary_ip": vm.primary_ip.address if vm.primary_ip else "N/A",
+            "status": vm.status.value if getattr(vm, 'status', None) else "Unknown",
+            "cluster": vm.cluster.name if getattr(vm, 'cluster', None) else "Unassigned",
+            "tenant": vm.tenant.name if getattr(vm, 'tenant', None) else "None",
+            "vcpus": int(vm.vcpus) if getattr(vm, 'vcpus', None) else 0,
+            "memory_mb": int(vm.memory) if getattr(vm, 'memory', None) else 0,
+            "disk_gb": int(vm.disk) if getattr(vm, 'disk', None) else 0,
+            "primary_ip": vm.primary_ip.address if getattr(vm, 'primary_ip', None) else "N/A",
             "comments": vm.comments or "",
             "interfaces_count": len(if_list),
             "interfaces": if_list
@@ -163,10 +165,9 @@ def power_action_vm(
         if not vm:
             raise HTTPException(status_code=404, detail="Không tìm thấy máy ảo.")
 
-        # CHUẨN HÓA: Ép chuỗi về chữ thường
-        user_role = current_user.role.name.lower() if current_user.role else "user"
+        user_role = current_user.role.name.upper() if current_user.role else "USER"
         
-        if user_role != "admin":
+        if user_role != "ADMIN":
             my_tenant = current_user.customer.tenant_slug if current_user.customer else None
             if not my_tenant or getattr(vm, 'tenant', None) is None or vm.tenant.slug != my_tenant:
                 raise HTTPException(

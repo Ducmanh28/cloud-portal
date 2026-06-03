@@ -13,7 +13,10 @@ router = APIRouter(prefix="/api/v1/business", tags=["Business Management"])
 # 1. API: QUẢN LÝ BẢNG GIÁ (PRICING PLANS)
 # ==========================================
 @router.get("/plans", response_model=List[schemas.PricingPlanResponse])
-def get_pricing_plans(db: Session = Depends(get_db), current_user: models.User = Depends(utils.get_current_user)):
+def get_pricing_plans(
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(utils.get_current_user)
+):
     """[ALL] Lấy danh sách các gói cước đang cung cấp. Ai đăng nhập cũng xem được."""
     return db.query(models.PricingPlan).all()
 
@@ -26,7 +29,9 @@ def get_customers(
     current_user: models.User = Depends(utils.get_current_user)
 ):
     """[ADMIN] Xem toàn bộ khách hàng. [USER] Chỉ xem thông tin của công ty mình."""
-    if current_user.role and current_user.role.name.upper() == "ADMIN":
+    user_role = current_user.role.name.upper() if current_user.role else "USER"
+    
+    if user_role == "ADMIN":
         return db.query(models.Customer).all()
     
     if not current_user.customer_id:
@@ -59,6 +64,17 @@ def create_customer(
 # ==========================================
 # 3. API: QUẢN LÝ HỢP ĐỒNG (CONTRACTS)
 # ==========================================
+@router.get("/contracts", response_model=List[schemas.ContractResponse])
+def get_all_contracts(
+    db: Session = Depends(get_db),
+    admin_user: models.User = Depends(utils.require_admin)
+):
+    """
+    [ADMIN] Lấy danh sách TOÀN BỘ hợp đồng hệ thống.
+    Đồng bộ trực tiếp với trang quản lý contract.html của Admin phục vụ bộ lọc và tìm kiếm.
+    """
+    return db.query(models.Contract).all()
+
 @router.get("/customers/{customer_id}/contracts", response_model=List[schemas.ContractResponse])
 def get_customer_contracts(
     customer_id: int, 
@@ -66,7 +82,10 @@ def get_customer_contracts(
     current_user: models.User = Depends(utils.get_current_user)
 ):
     """[ADMIN] Xem hợp đồng bất kỳ. [USER] Chỉ xem hợp đồng của công ty mình."""
-    if current_user.role.name.upper() != "ADMIN" and current_user.customer_id != customer_id:
+    # Khắc phục lỗi AttributeError nếu người dùng không có quyền (role = None)
+    user_role = current_user.role.name.upper() if current_user.role else "USER"
+    
+    if user_role != "ADMIN" and current_user.customer_id != customer_id:
         raise HTTPException(status_code=403, detail="Bạn không được phép xem hợp đồng của khách hàng khác.")
 
     return db.query(models.Contract).filter(models.Contract.customer_id == customer_id).all()
