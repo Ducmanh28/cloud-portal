@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Optional
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 # Import từ thư mục cha
 from ..database import get_db
@@ -8,6 +9,10 @@ from .. import models, utils
 from ..netbox_client import nb_client
 
 router = APIRouter(prefix="/api/v1/virtualization", tags=["Virtualization (VMs & Clusters)"])
+
+
+class PowerActionRequest(BaseModel):
+    action: str
 
 # ==========================================
 # 1. API: QUẢN LÝ CỤM ẢO HÓA (CLUSTERS)
@@ -21,7 +26,6 @@ def get_clusters(
     [ADMIN] Lấy danh sách các cụm máy chủ ảo hóa.
     Chỉ Quản trị viên hệ thống mới được phép xem tài nguyên hạ tầng lõi này.
     """
-    # Đồng bộ hóa chuẩn kiểm tra quyền Admin (.upper())
     user_role = current_user.role.name.upper() if current_user.role else "USER"
     if user_role != "ADMIN":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập tài nguyên này.")
@@ -30,7 +34,6 @@ def get_clusters(
         clusters = nb_client.virtualization.clusters.all()
         results = []
         for cluster in clusters:
-            # Sử dụng getattr để bẫy lỗi an toàn khi NetBox trả về null/missing field
             results.append({
                 "id": cluster.id,
                 "name": cluster.name,
@@ -64,12 +67,10 @@ def get_vms(
             if tenant_slug:
                 query_params['tenant'] = tenant_slug
         else:
-            # Quyền USER: Khóa chặt phạm vi truy vấn vào Tenant của người dùng
             if not current_user.customer or not current_user.customer.tenant_slug:
                 return {"total": 0, "vms": []}
             query_params['tenant'] = current_user.customer.tenant_slug
 
-        # Thực thi truy vấn sang NetBox
         if query_params:
             vms = nb_client.virtualization.virtual_machines.filter(**query_params)
         else:
@@ -109,16 +110,14 @@ def get_vm_details(
 
         user_role = current_user.role.name.upper() if current_user.role else "USER"
         
-        # BẢO MẬT: Kiểm tra quyền sở hữu nếu là USER thường
         if user_role != "ADMIN":
             my_tenant = current_user.customer.tenant_slug if current_user.customer else None
             if not my_tenant or getattr(vm, 'tenant', None) is None or vm.tenant.slug != my_tenant:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, 
-                    detail="Cảnh báo an ninh: Bạn không có quyền truy cập máy ảo của tổ chức khác."
+                    detail="Bạn không có quyền truy cập máy ảo của tổ chức khác."
                 )
 
-        # Lấy thêm thông tin Interface (Cạc mạng ảo)
         interfaces = nb_client.virtualization.interfaces.filter(virtual_machine_id=vm_id)
         if_list = [{
             "id": i.id,
@@ -152,10 +151,11 @@ def get_vm_details(
 @router.post("/vms/{vm_id}/power")
 def power_action_vm(
     vm_id: int, 
-    action: str, 
+    payload: PowerActionRequest, 
     current_user: models.User = Depends(utils.get_current_user)
 ):
     """Gửi lệnh điều khiển nguồn tới máy ảo."""
+    action = payload.action.lower().strip()
     valid_actions = ["start", "stop", "restart", "shutdown"]
     if action not in valid_actions:
         raise HTTPException(status_code=400, detail=f"Hành động không hợp lệ. Chỉ chấp nhận: {valid_actions}")
@@ -172,7 +172,7 @@ def power_action_vm(
             if not my_tenant or getattr(vm, 'tenant', None) is None or vm.tenant.slug != my_tenant:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, 
-                    detail="Cảnh báo an ninh: Không có quyền thao tác trên máy ảo này."
+                    detail="Không có quyền thao tác trên máy ảo này."
                 )
         
         return {
