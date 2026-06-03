@@ -14,7 +14,8 @@ from .routes import (
     business, 
     dcim, 
     virtualization, 
-    ipam
+    ipam,
+    billing
 )
 
 # 1. Khởi tạo Database (Tự động tạo bảng nếu chưa có)
@@ -34,7 +35,13 @@ def read_root():
 # 3. Cấu hình Middleware (CORS - Cho phép Frontend gọi API)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=[
+        "http://172.16.66.82",
+        "http://172.16.66.82:8000",
+        "http://localhost",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,6 +55,7 @@ app.include_router(business.router)        # /api/v1/business/*
 app.include_router(dcim.router)            # /api/v1/dcim/*
 app.include_router(virtualization.router)  # /api/v1/virtualization/*
 app.include_router(ipam.router)            # /api/v1/ipam/*
+app.include_router(billing.router)         # /api/v1/billing/*
 
 # 5. Khối lệnh chạy trực tiếp
 if __name__ == "__main__":
