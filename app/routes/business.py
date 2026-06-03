@@ -82,7 +82,6 @@ def get_customer_contracts(
     current_user: models.User = Depends(utils.get_current_user)
 ):
     """[ADMIN] Xem hợp đồng bất kỳ. [USER] Chỉ xem hợp đồng của công ty mình."""
-    # Khắc phục lỗi AttributeError nếu người dùng không có quyền (role = None)
     user_role = current_user.role.name.upper() if current_user.role else "USER"
     
     if user_role != "ADMIN" and current_user.customer_id != customer_id:
@@ -100,8 +99,10 @@ def create_contract(
     if not db.query(models.Customer).filter(models.Customer.id == contract_in.customer_id).first():
         raise HTTPException(status_code=404, detail="Không tìm thấy Khách hàng.")
 
-    if not db.query(models.PricingPlan).filter(models.PricingPlan.id == contract_in.plan_id).first():
-        raise HTTPException(status_code=404, detail="Không tìm thấy Gói cước.")
+    # plan_id trong schema đang là Optional, nên chỉ kiểm tra nếu frontend gửi plan_id.
+    if contract_in.plan_id is not None:
+        if not db.query(models.PricingPlan).filter(models.PricingPlan.id == contract_in.plan_id).first():
+            raise HTTPException(status_code=404, detail="Không tìm thấy Gói cước.")
 
     if contract_in.end_date <= contract_in.start_date:
         raise HTTPException(status_code=400, detail="Ngày kết thúc phải sau Ngày bắt đầu.")
