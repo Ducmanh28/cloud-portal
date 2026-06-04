@@ -45,6 +45,20 @@ const utils = {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
     },
 
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    },
+
+    safeText(value, fallback = 'N/A') {
+        if (value === null || value === undefined || value === '') return fallback;
+        return this.escapeHtml(value);
+    },
+
     /**
      * 2. SINH GIAO DIỆN (UI GENERATORS)
      */
@@ -86,7 +100,7 @@ const utils = {
                 break;
         }
 
-        return `<span class="badge badge-status ${badgeClass}">${label}</span>`;
+        return `<span class="badge badge-status ${badgeClass}">${this.escapeHtml(label)}</span>`;
     },
 
     /**
@@ -149,7 +163,7 @@ function normalizeAdminSidebarLinks() {
 
     sidebar.innerHTML = items.map((item) => {
         const activeClass = item.href === currentPage ? "active" : "";
-        return `<a href="${item.href}" class="${activeClass}"><i class="bi ${item.icon} me-2"></i> ${item.label}</a>`;
+        return `<a href="${item.href}" class="${activeClass}"><i class="bi ${item.icon} me-2"></i> ${utils.escapeHtml(item.label)}</a>`;
     }).join("");
 }
 
