@@ -74,14 +74,15 @@ const utils = {
                 badgeClass = 'badge-suspended';
                 label = 'Tạm khóa';
                 break;
-            case 'maintenance':
-                badgeClass = 'badge-maintenance';
-                label = 'Bảo trì';
-                break;
+            case 'pending':
             case 'planned':
             case 'staged':
                 badgeClass = 'badge-unknown';
                 label = 'Đang triển khai';
+                break;
+            case 'maintenance':
+                badgeClass = 'badge-maintenance';
+                label = 'Bảo trì';
                 break;
         }
 
@@ -116,7 +117,7 @@ const utils = {
     // Lấy thông tin user hiện tại từ LocalStorage một cách an toàn
     getCurrentUser() {
         try {
-            const userStr = localStorage.getItem('user_info');
+            const userStr = localStorage.getItem('user_info') || localStorage.getItem('user');
             return userStr ? JSON.parse(userStr) : null;
         } catch (e) {
             return null;
@@ -129,3 +130,23 @@ const utils = {
         return user && user.role && user.role.name === "ADMIN";
     }
 };
+
+function normalizeAdminSidebarLinks() {
+    if (!window.location.pathname.includes("/admin/")) return;
+
+    const linkMap = {
+        "users.html": "user.html",
+        "my-vms.html": "virtualazation.html",
+        "my-devices.html": "dcim.html",
+        "billing.html": "contract.html"
+    };
+
+    document.querySelectorAll(".sidebar a").forEach((link) => {
+        const href = link.getAttribute("href");
+        if (linkMap[href]) {
+            link.setAttribute("href", linkMap[href]);
+        }
+    });
+}
+
+document.addEventListener("DOMContentLoaded", normalizeAdminSidebarLinks);
