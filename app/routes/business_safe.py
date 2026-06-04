@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -19,68 +19,157 @@ def _json_value(value):
     return value
 
 
+def _columns(db: Session, table_name: str) -> set[str]:
+    inspector = inspect(db.bind)
+    table_names = set(inspector.get_table_names())
+    if table_name not in table_names:
+        return set()
+    return {col["name"] for col in inspector.get_columns(table_name)}
+
+
+def _pick(row, *names, default=None):
+    for name in names:
+        if name in row and row[name] is not None:
+            return row[name]
+    return default
+
+
 def _contract_row_to_dict(row) -> dict:
-    total_price = _json_value(row.get("total_price") or 0)
+    total_price = _json_value(_pick(row, "total_price", "total_value", "amount", "price", default=0))
+    customer_id = _pick(row, "customer_id", "tenant_id", "customerid")
+    plan_id = _pick(row, "plan_id", "pricing_plan_id", "pricing_id")
+
     return {
-        "id": row.get("id"),
-        "vm_netbox_id": row.get("vm_netbox_id"),
+        "id": _pick(row, "id", "contract_id"),
+        "contract_code": _pick(row, "contract_code", "code", "contract_no"),
+        "vm_netbox_id": _pick(row, "vm_netbox_id", "vm_id", "virtual_machine_id"),
         "total_price": total_price,
         "total_value": total_price,
-        "start_date": _json_value(row.get("start_date")),
-        "end_date": _json_value(row.get("end_date")),
-        "status": row.get("status") or "ACTIVE",
-        "customer_id": row.get("customer_id"),
-        "plan_id": row.get("plan_id"),
+        "start_date": _json_value(_pick(row, "start_date", "started_at", "created_at")),
+        "end_date": _json_value(_pick(row, "end_date", "expired_at")),
+        "status": _pick(row, "status", default="ACTIVE"),
+        "customer_id": customer_id,
+        "plan_id": plan_id,
         "customer": {
-            "id": row.get("customer_id"),
-            "tenant_slug": row.get("tenant_slug"),
-            "company_name": row.get("company_name"),
-            "tax_code": row.get("tax_code"),
-            "address": row.get("address"),
-            "contact_person": row.get("contact_person"),
-            "status": row.get("customer_status"),
-        } if row.get("customer_id") else None,
+            "id": customer_id,
+            "tenant_slug": _pick(row, "tenant_slug"),
+            "company_name": _pick(row, "company_name", default="Không xác định"),
+            "tax_code": _pick(row, "tax_code"),
+            "address": _pick(row, "address"),
+            "contact_person": _pick(row, "contact_person"),
+            "status": _pick(row, "customer_status"),
+        } if customer_id else None,
         "plan": {
-            "id": row.get("plan_id"),
-            "name": row.get("plan_name"),
-            "cpu_core_price": _json_value(row.get("cpu_core_price")),
-            "ram_gb_price": _json_value(row.get("ram_gb_price")),
-            "disk_gb_price": _json_value(row.get("disk_gb_price")),
-            "currency": row.get("currency"),
-        } if row.get("plan_id") else None,
+            "id": plan_id,
+            "name": _pick(row, "plan_name", default="Không xác định"),
+            "cpu_core_price": _json_value(_pick(row, "cpu_core_price")),
+            "ram_gb_price": _json_value(_pick(row, "ram_gb_price")),
+            "disk_gb_price": _json_value(_pick(row, "disk_gb_price")),
+            "currency": _pick(row, "currency", default="VND"),
+        } if plan_id else None,
     }
 
 
-def _contract_query(where_sql: str = "", params: dict | None = None):
-    sql = """
-        SELECT
-            c.id,
-            c.vm_netbox_id,
-            c.total_price,
-            c.start_date,
-            c.end_date,
-            c.status,
-            c.customer_id,
-            c.plan_id,
-            cu.tenant_slug,
-            cu.company_name,
-            cu.tax_code,
-            cu.address,
-            cu.contact_person,
-            cu.status AS customer_status,
-            p.name AS plan_name,
-            p.cpu_core_price,
-            p.ram_gb_price,
-            p.disk_gb_price,
-            p.currency
-        FROM contracts c
-        LEFT JOIN customers cu ON cu.id = c.customer_id
-        LEFT JOIN pricing_plans p ON p.id = c.plan_id
-    """
+def _select_expr(table_alias: str, columns: set[str], column_name: str, alias: str | None = None):
+    output_name = alias or column_name
+    if column_name in columns:
+        return f"{table_alias}.{column_name} AS {output_name}"
+    return f"NULL AS {output_name}"
+
+
+def _contract_query(db: Session, where_sql: str = "", params: dict | None = None):
+    contract_columns = _columns(db, "contracts")
+    customer_columns = _columns(db, "customers")
+    plan_columns = _columns(db, "pricing_plans")
+
+    if not contract_columns:
+        raise HTTPException(status_code=500, detail="Không tìm thấy bảng contracts trong database.")
+
+    contract_customer_col = None
+    for candidate in ("customer_id", "tenant_id", "customerid"):
+        if candidate in contract_columns:
+            contract_customer_col = candidate
+            break
+
+    contract_plan_col = None
+    for candidate in ("plan_id", "pricing_plan_id", "pricing_id"):
+        if candidate in contract_columns:
+            contract_plan_col = candidate
+            break
+
+    contract_id_col = "id" if "id" in contract_columns else "contract_id"
+
+    select_parts = [
+        _select_expr("c", contract_columns, "id"),
+        _select_expr("c", contract_columns, "contract_id"),
+        _select_expr("c", contract_columns, "contract_code"),
+        _select_expr("c", contract_columns, "code"),
+        _select_expr("c", contract_columns, "contract_no"),
+        _select_expr("c", contract_columns, "vm_netbox_id"),
+        _select_expr("c", contract_columns, "vm_id"),
+        _select_expr("c", contract_columns, "virtual_machine_id"),
+        _select_expr("c", contract_columns, "total_price"),
+        _select_expr("c", contract_columns, "total_value"),
+        _select_expr("c", contract_columns, "amount"),
+        _select_expr("c", contract_columns, "price"),
+        _select_expr("c", contract_columns, "start_date"),
+        _select_expr("c", contract_columns, "started_at"),
+        _select_expr("c", contract_columns, "created_at"),
+        _select_expr("c", contract_columns, "end_date"),
+        _select_expr("c", contract_columns, "expired_at"),
+        _select_expr("c", contract_columns, "status"),
+        f"c.{contract_customer_col} AS customer_id" if contract_customer_col else "NULL AS customer_id",
+        f"c.{contract_plan_col} AS plan_id" if contract_plan_col else "NULL AS plan_id",
+    ]
+
+    joins = []
+    if contract_customer_col and customer_columns:
+        select_parts.extend([
+            _select_expr("cu", customer_columns, "tenant_slug"),
+            _select_expr("cu", customer_columns, "company_name"),
+            _select_expr("cu", customer_columns, "tax_code"),
+            _select_expr("cu", customer_columns, "address"),
+            _select_expr("cu", customer_columns, "contact_person"),
+            _select_expr("cu", customer_columns, "status", "customer_status"),
+        ])
+        joins.append(f"LEFT JOIN customers cu ON cu.id = c.{contract_customer_col}")
+    else:
+        select_parts.extend([
+            "NULL AS tenant_slug",
+            "NULL AS company_name",
+            "NULL AS tax_code",
+            "NULL AS address",
+            "NULL AS contact_person",
+            "NULL AS customer_status",
+        ])
+
+    if contract_plan_col and plan_columns:
+        select_parts.extend([
+            _select_expr("p", plan_columns, "name", "plan_name"),
+            _select_expr("p", plan_columns, "cpu_core_price"),
+            _select_expr("p", plan_columns, "ram_gb_price"),
+            _select_expr("p", plan_columns, "disk_gb_price"),
+            _select_expr("p", plan_columns, "currency"),
+        ])
+        joins.append(f"LEFT JOIN pricing_plans p ON p.id = c.{contract_plan_col}")
+    else:
+        select_parts.extend([
+            "NULL AS plan_name",
+            "NULL AS cpu_core_price",
+            "NULL AS ram_gb_price",
+            "NULL AS disk_gb_price",
+            "NULL AS currency",
+        ])
+
+    sql = f"SELECT {', '.join(select_parts)} FROM contracts c"
+    if joins:
+        sql += " " + " ".join(joins)
     if where_sql:
         sql += f" WHERE {where_sql}"
-    sql += " ORDER BY c.id DESC"
-    return text(sql), params or {}
+    if contract_id_col in contract_columns:
+        sql += f" ORDER BY c.{contract_id_col} DESC"
+
+    return text(sql), params or {}, contract_customer_col
 
 
 @router.get("/plans", response_model=List[schemas.PricingPlanResponse])
@@ -130,7 +219,7 @@ def get_all_contracts(
     db: Session = Depends(get_db),
     admin_user: models.User = Depends(utils.require_admin),
 ):
-    sql, params = _contract_query()
+    sql, params, _ = _contract_query(db)
     rows = db.execute(sql, params).mappings().all()
     return [_contract_row_to_dict(row) for row in rows]
 
@@ -145,7 +234,11 @@ def get_customer_contracts(
     if role != "ADMIN" and current_user.customer_id != customer_id:
         raise HTTPException(status_code=403, detail="Bạn không được phép xem hợp đồng của khách hàng khác.")
 
-    sql, params = _contract_query("c.customer_id = :customer_id", {"customer_id": customer_id})
+    _, _, contract_customer_col = _contract_query(db)
+    if not contract_customer_col:
+        return []
+
+    sql, params, _ = _contract_query(db, f"c.{contract_customer_col} = :customer_id", {"customer_id": customer_id})
     rows = db.execute(sql, params).mappings().all()
     return [_contract_row_to_dict(row) for row in rows]
 
@@ -156,6 +249,10 @@ def create_contract(
     db: Session = Depends(get_db),
     admin_user: models.User = Depends(utils.require_admin),
 ):
+    contract_columns = _columns(db, "contracts")
+    if "customer_id" not in contract_columns:
+        raise HTTPException(status_code=400, detail="Bảng contracts hiện không có cột customer_id; chưa thể tạo hợp đồng từ API này.")
+
     if not db.query(models.Customer).filter(models.Customer.id == contract_in.customer_id).first():
         raise HTTPException(status_code=404, detail="Không tìm thấy Khách hàng.")
 
@@ -171,7 +268,7 @@ def create_contract(
     db.commit()
     db.refresh(contract)
 
-    sql, params = _contract_query("c.id = :contract_id", {"contract_id": contract.id})
+    sql, params, _ = _contract_query(db, "c.id = :contract_id", {"contract_id": contract.id})
     row = db.execute(sql, params).mappings().first()
     return _contract_row_to_dict(row)
 
@@ -183,15 +280,20 @@ def update_contract_status(
     db: Session = Depends(get_db),
     admin_user: models.User = Depends(utils.require_admin),
 ):
+    contract_columns = _columns(db, "contracts")
+    if "status" not in contract_columns:
+        raise HTTPException(status_code=400, detail="Bảng contracts không có cột status.")
+
+    id_col = "id" if "id" in contract_columns else "contract_id"
     status_value = new_status.value if hasattr(new_status, "value") else str(new_status)
     result = db.execute(
-        text("UPDATE contracts SET status = :status WHERE id = :contract_id"),
+        text(f"UPDATE contracts SET status = :status WHERE {id_col} = :contract_id"),
         {"status": status_value, "contract_id": contract_id},
     )
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Không tìm thấy Hợp đồng.")
     db.commit()
 
-    sql, params = _contract_query("c.id = :contract_id", {"contract_id": contract_id})
+    sql, params, _ = _contract_query(db, f"c.{id_col} = :contract_id", {"contract_id": contract_id})
     row = db.execute(sql, params).mappings().first()
     return _contract_row_to_dict(row)
