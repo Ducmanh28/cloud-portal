@@ -1,6 +1,8 @@
+from datetime import date, datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 from typing import List
 
 from .. import models, schemas, utils
@@ -9,42 +11,76 @@ from ..database import get_db
 router = APIRouter(prefix="/api/v1/business", tags=["Business Management"])
 
 
-def _num(value):
+def _json_value(value):
     if isinstance(value, Decimal):
         return float(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
     return value
 
 
-def _contract_to_dict(contract: models.Contract) -> dict:
-    total_price = _num(contract.total_price or 0)
+def _contract_row_to_dict(row) -> dict:
+    total_price = _json_value(row.get("total_price") or 0)
     return {
-        "id": contract.id,
-        "vm_netbox_id": contract.vm_netbox_id,
+        "id": row.get("id"),
+        "vm_netbox_id": row.get("vm_netbox_id"),
         "total_price": total_price,
         "total_value": total_price,
-        "start_date": contract.start_date.isoformat() if contract.start_date else None,
-        "end_date": contract.end_date.isoformat() if contract.end_date else None,
-        "status": contract.status.value if hasattr(contract.status, "value") else str(contract.status or "ACTIVE"),
-        "customer_id": contract.customer_id,
-        "plan_id": contract.plan_id,
+        "start_date": _json_value(row.get("start_date")),
+        "end_date": _json_value(row.get("end_date")),
+        "status": row.get("status") or "ACTIVE",
+        "customer_id": row.get("customer_id"),
+        "plan_id": row.get("plan_id"),
         "customer": {
-            "id": contract.customer.id,
-            "tenant_slug": contract.customer.tenant_slug,
-            "company_name": contract.customer.company_name,
-            "tax_code": contract.customer.tax_code,
-            "address": contract.customer.address,
-            "contact_person": contract.customer.contact_person,
-            "status": contract.customer.status,
-        } if contract.customer else None,
+            "id": row.get("customer_id"),
+            "tenant_slug": row.get("tenant_slug"),
+            "company_name": row.get("company_name"),
+            "tax_code": row.get("tax_code"),
+            "address": row.get("address"),
+            "contact_person": row.get("contact_person"),
+            "status": row.get("customer_status"),
+        } if row.get("customer_id") else None,
         "plan": {
-            "id": contract.plan.id,
-            "name": contract.plan.name,
-            "cpu_core_price": _num(contract.plan.cpu_core_price),
-            "ram_gb_price": _num(contract.plan.ram_gb_price),
-            "disk_gb_price": _num(contract.plan.disk_gb_price),
-            "currency": contract.plan.currency,
-        } if contract.plan else None,
+            "id": row.get("plan_id"),
+            "name": row.get("plan_name"),
+            "cpu_core_price": _json_value(row.get("cpu_core_price")),
+            "ram_gb_price": _json_value(row.get("ram_gb_price")),
+            "disk_gb_price": _json_value(row.get("disk_gb_price")),
+            "currency": row.get("currency"),
+        } if row.get("plan_id") else None,
     }
+
+
+def _contract_query(where_sql: str = "", params: dict | None = None):
+    sql = """
+        SELECT
+            c.id,
+            c.vm_netbox_id,
+            c.total_price,
+            c.start_date,
+            c.end_date,
+            c.status,
+            c.customer_id,
+            c.plan_id,
+            cu.tenant_slug,
+            cu.company_name,
+            cu.tax_code,
+            cu.address,
+            cu.contact_person,
+            cu.status AS customer_status,
+            p.name AS plan_name,
+            p.cpu_core_price,
+            p.ram_gb_price,
+            p.disk_gb_price,
+            p.currency
+        FROM contracts c
+        LEFT JOIN customers cu ON cu.id = c.customer_id
+        LEFT JOIN pricing_plans p ON p.id = c.plan_id
+    """
+    if where_sql:
+        sql += f" WHERE {where_sql}"
+    sql += " ORDER BY c.id DESC"
+    return text(sql), params or {}
 
 
 @router.get("/plans", response_model=List[schemas.PricingPlanResponse])
@@ -94,12 +130,9 @@ def get_all_contracts(
     db: Session = Depends(get_db),
     admin_user: models.User = Depends(utils.require_admin),
 ):
-    contracts = (
-        db.query(models.Contract)
-        .options(joinedload(models.Contract.customer), joinedload(models.Contract.plan))
-        .all()
-    )
-    return [_contract_to_dict(contract) for contract in contracts]
+    sql, params = _contract_query()
+    rows = db.execute(sql, params).mappings().all()
+    return [_contract_row_to_dict(row) for row in rows]
 
 
 @router.get("/customers/{customer_id}/contracts")
@@ -112,13 +145,9 @@ def get_customer_contracts(
     if role != "ADMIN" and current_user.customer_id != customer_id:
         raise HTTPException(status_code=403, detail="Bạn không được phép xem hợp đồng của khách hàng khác.")
 
-    contracts = (
-        db.query(models.Contract)
-        .options(joinedload(models.Contract.customer), joinedload(models.Contract.plan))
-        .filter(models.Contract.customer_id == customer_id)
-        .all()
-    )
-    return [_contract_to_dict(contract) for contract in contracts]
+    sql, params = _contract_query("c.customer_id = :customer_id", {"customer_id": customer_id})
+    rows = db.execute(sql, params).mappings().all()
+    return [_contract_row_to_dict(row) for row in rows]
 
 
 @router.post("/contracts", status_code=status.HTTP_201_CREATED)
@@ -141,7 +170,10 @@ def create_contract(
     db.add(contract)
     db.commit()
     db.refresh(contract)
-    return _contract_to_dict(contract)
+
+    sql, params = _contract_query("c.id = :contract_id", {"contract_id": contract.id})
+    row = db.execute(sql, params).mappings().first()
+    return _contract_row_to_dict(row)
 
 
 @router.put("/contracts/{contract_id}/status")
@@ -151,11 +183,15 @@ def update_contract_status(
     db: Session = Depends(get_db),
     admin_user: models.User = Depends(utils.require_admin),
 ):
-    contract = db.query(models.Contract).filter(models.Contract.id == contract_id).first()
-    if not contract:
+    status_value = new_status.value if hasattr(new_status, "value") else str(new_status)
+    result = db.execute(
+        text("UPDATE contracts SET status = :status WHERE id = :contract_id"),
+        {"status": status_value, "contract_id": contract_id},
+    )
+    if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Không tìm thấy Hợp đồng.")
-
-    contract.status = new_status
     db.commit()
-    db.refresh(contract)
-    return _contract_to_dict(contract)
+
+    sql, params = _contract_query("c.id = :contract_id", {"contract_id": contract_id})
+    row = db.execute(sql, params).mappings().first()
+    return _contract_row_to_dict(row)
