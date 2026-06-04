@@ -8,14 +8,14 @@ from . import models
 
 # Import tất cả các Router từ thư mục routes
 from .routes import (
-    system, 
-    auth, 
-    iam, 
-    business, 
-    dcim, 
-    virtualization, 
+    system,
+    auth,
+    iam,
+    business,
+    dcim,
+    virtualization,
     ipam,
-    billing
+    billing,
 )
 
 # 1. Khởi tạo Database (Tự động tạo bảng nếu chưa có)
@@ -25,21 +25,26 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Suncloud Management API",
     description="Backend Service tích hợp NetBox và Quản lý Kinh doanh",
-    version="1.0.0"
+    version="1.0.0",
 )
+
 
 @app.get("/")
 def read_root():
     return {"message": "Chào mừng đến với Suncloud Management API!"}
+
 
 # 3. Cấu hình Middleware (CORS - Cho phép Frontend gọi API)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://172.16.66.82",
+        "http://172.16.66.82:5500",
         "http://172.16.66.82:8000",
         "http://localhost",
+        "http://localhost:5500",
         "http://localhost:8000",
+        "http://127.0.0.1:5500",
         "http://127.0.0.1:8000",
     ],
     allow_credentials=True,
