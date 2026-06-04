@@ -1,4 +1,4 @@
-/* ==========================================================================
+/* ========================================================================== 
    SUNCLOUD PORTAL - UTILITY FUNCTIONS
    ========================================================================== */
 
@@ -134,19 +134,23 @@ const utils = {
 function normalizeAdminSidebarLinks() {
     if (!window.location.pathname.includes("/admin/")) return;
 
-    const linkMap = {
-        "users.html": "user.html",
-        "my-vms.html": "virtualazation.html",
-        "my-devices.html": "dcim.html",
-        "billing.html": "contract.html"
-    };
+    const sidebar = document.querySelector(".sidebar");
+    if (!sidebar) return;
 
-    document.querySelectorAll(".sidebar a").forEach((link) => {
-        const href = link.getAttribute("href");
-        if (linkMap[href]) {
-            link.setAttribute("href", linkMap[href]);
-        }
-    });
+    const currentPage = window.location.pathname.split("/").pop();
+    const items = [
+        { href: "dashboard.html", icon: "bi-speedometer2", label: "Tổng quan HT" },
+        { href: "user.html", icon: "bi-people", label: "Quản lý Người dùng" },
+        { href: "virtualazation.html", icon: "bi-pc-display", label: "Quản lý Máy ảo" },
+        { href: "dcim.html", icon: "bi-server", label: "Hạ tầng Vật lý (DCIM)" },
+        { href: "ipam.html", icon: "bi-diagram-3", label: "Quản lý Mạng (IPAM)" },
+        { href: "contract.html", icon: "bi-file-earmark-text", label: "Quản lý Hợp đồng" }
+    ];
+
+    sidebar.innerHTML = items.map((item) => {
+        const activeClass = item.href === currentPage ? "active" : "";
+        return `<a href="${item.href}" class="${activeClass}"><i class="bi ${item.icon} me-2"></i> ${item.label}</a>`;
+    }).join("");
 }
 
 document.addEventListener("DOMContentLoaded", normalizeAdminSidebarLinks);
