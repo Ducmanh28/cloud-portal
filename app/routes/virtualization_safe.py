@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Optional
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -37,22 +37,78 @@ def _primary_ip(obj):
     return getattr(ip, "address", "N/A") if ip else "N/A"
 
 
+def _columns(db: Session, table_name: str) -> set[str]:
+    inspector = inspect(db.bind)
+    if table_name not in set(inspector.get_table_names()):
+        return set()
+    return {col["name"] for col in inspector.get_columns(table_name)}
+
+
+def _select_expr(alias: str, columns: set[str], column_name: str, output_name: str | None = None) -> str:
+    out = output_name or column_name
+    if column_name in columns:
+        return f"{alias}.{column_name} AS {out}"
+    return f"NULL AS {out}"
+
+
 def _load_contract_map(db: Session):
-    rows = db.execute(text("""
-        SELECT
-            c.id AS contract_id,
-            c.vm_netbox_id,
-            c.customer_id,
-            c.plan_id,
-            cu.company_name,
-            cu.tenant_slug,
-            p.name AS plan_name
-        FROM contracts c
-        LEFT JOIN customers cu ON cu.id = c.customer_id
-        LEFT JOIN pricing_plans p ON p.id = c.plan_id
-        WHERE c.vm_netbox_id IS NOT NULL
-    """)).mappings().all()
-    return {row["vm_netbox_id"]: row for row in rows}
+    contract_columns = _columns(db, "contracts")
+    customer_columns = _columns(db, "customers")
+    plan_columns = _columns(db, "pricing_plans")
+
+    if not contract_columns:
+        return {}
+
+    vm_col = None
+    for candidate in ("vm_netbox_id", "vm_id", "virtual_machine_id"):
+        if candidate in contract_columns:
+            vm_col = candidate
+            break
+    if not vm_col:
+        return {}
+
+    customer_col = None
+    for candidate in ("customer_id", "tenant_id", "customerid"):
+        if candidate in contract_columns:
+            customer_col = candidate
+            break
+
+    plan_col = None
+    for candidate in ("plan_id", "pricing_plan_id", "pricing_id"):
+        if candidate in contract_columns:
+            plan_col = candidate
+            break
+
+    select_parts = [
+        _select_expr("c", contract_columns, "id", "contract_id"),
+        f"c.{vm_col} AS vm_netbox_id",
+        f"c.{customer_col} AS customer_id" if customer_col else "NULL AS customer_id",
+        f"c.{plan_col} AS plan_id" if plan_col else "NULL AS plan_id",
+    ]
+
+    joins = []
+    if customer_col and customer_columns:
+        select_parts.extend([
+            _select_expr("cu", customer_columns, "company_name"),
+            _select_expr("cu", customer_columns, "tenant_slug"),
+        ])
+        joins.append(f"LEFT JOIN customers cu ON cu.id = c.{customer_col}")
+    else:
+        select_parts.extend(["NULL AS company_name", "NULL AS tenant_slug"])
+
+    if plan_col and plan_columns:
+        select_parts.append(_select_expr("p", plan_columns, "name", "plan_name"))
+        joins.append(f"LEFT JOIN pricing_plans p ON p.id = c.{plan_col}")
+    else:
+        select_parts.append("NULL AS plan_name")
+
+    sql = f"SELECT {', '.join(select_parts)} FROM contracts c"
+    if joins:
+        sql += " " + " ".join(joins)
+    sql += f" WHERE c.{vm_col} IS NOT NULL"
+
+    rows = db.execute(text(sql)).mappings().all()
+    return {row["vm_netbox_id"]: row for row in rows if row.get("vm_netbox_id") is not None}
 
 
 def _vm_to_dict(vm, contract=None):
