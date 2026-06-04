@@ -4,7 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import engine
 from . import models
-from .routes import system, auth, iam, business, virtualization, billing
+from .routes import system, auth, iam, virtualization, billing
+from .routes import business_safe as business
 from .routes import dcim_safe as dcim
 from .routes import ipam_safe as ipam
 
