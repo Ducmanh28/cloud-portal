@@ -83,3 +83,7 @@ class Contract(Base):
     # Mối quan hệ
     customer = relationship("Customer", back_populates="contracts")
     plan = relationship("PricingPlan", back_populates="contracts")
+
+    @property
+    def total_value(self):
+        return self.total_price
