@@ -14,7 +14,7 @@ from .routes import (
     business,
     dcim,
     virtualization,
-    ipam,
+    ipam_safe as ipam,
     billing,
 )
 
