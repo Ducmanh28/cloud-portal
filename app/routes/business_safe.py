@@ -37,11 +37,13 @@ def _pick(row, *names, default=None):
 def _contract_row_to_dict(row) -> dict:
     total_price = _json_value(_pick(row, "total_price", "total_value", "amount", "price", default=0))
     customer_id = _pick(row, "customer_id", "tenant_id", "customerid")
+    user_id = _pick(row, "user_id")
     plan_id = _pick(row, "plan_id", "pricing_plan_id", "pricing_id")
 
     return {
         "id": _pick(row, "id", "contract_id"),
         "contract_code": _pick(row, "contract_code", "code", "contract_no"),
+        "user_id": user_id,
         "vm_netbox_id": _pick(row, "vm_netbox_id", "vm_id", "virtual_machine_id"),
         "total_price": total_price,
         "total_value": total_price,
@@ -79,6 +81,7 @@ def _select_expr(table_alias: str, columns: set[str], column_name: str, alias: s
 
 def _contract_query(db: Session, where_sql: str = "", params: dict | None = None):
     contract_columns = _columns(db, "contracts")
+    user_columns = _columns(db, "users")
     customer_columns = _columns(db, "customers")
     plan_columns = _columns(db, "pricing_plans")
 
@@ -90,6 +93,8 @@ def _contract_query(db: Session, where_sql: str = "", params: dict | None = None
         if candidate in contract_columns:
             contract_customer_col = candidate
             break
+
+    contract_user_col = "user_id" if "user_id" in contract_columns else None
 
     contract_plan_col = None
     for candidate in ("plan_id", "pricing_plan_id", "pricing_id"):
@@ -105,6 +110,7 @@ def _contract_query(db: Session, where_sql: str = "", params: dict | None = None
         _select_expr("c", contract_columns, "contract_code"),
         _select_expr("c", contract_columns, "code"),
         _select_expr("c", contract_columns, "contract_no"),
+        _select_expr("c", contract_columns, "user_id"),
         _select_expr("c", contract_columns, "vm_netbox_id"),
         _select_expr("c", contract_columns, "vm_id"),
         _select_expr("c", contract_columns, "virtual_machine_id"),
@@ -118,12 +124,22 @@ def _contract_query(db: Session, where_sql: str = "", params: dict | None = None
         _select_expr("c", contract_columns, "end_date"),
         _select_expr("c", contract_columns, "expired_at"),
         _select_expr("c", contract_columns, "status"),
-        f"c.{contract_customer_col} AS customer_id" if contract_customer_col else "NULL AS customer_id",
+        f"c.{contract_customer_col} AS customer_id" if contract_customer_col else "u.customer_id AS customer_id" if contract_user_col and "customer_id" in user_columns else "NULL AS customer_id",
         f"c.{contract_plan_col} AS plan_id" if contract_plan_col else "NULL AS plan_id",
     ]
 
     joins = []
+    if contract_user_col and user_columns:
+        joins.append(f"LEFT JOIN users u ON u.id = c.{contract_user_col}")
+
     if contract_customer_col and customer_columns:
+        customer_join = f"LEFT JOIN customers cu ON cu.id = c.{contract_customer_col}"
+    elif contract_user_col and user_columns and "customer_id" in user_columns and customer_columns:
+        customer_join = "LEFT JOIN customers cu ON cu.id = u.customer_id"
+    else:
+        customer_join = None
+
+    if customer_join:
         select_parts.extend([
             _select_expr("cu", customer_columns, "tenant_slug"),
             _select_expr("cu", customer_columns, "company_name"),
@@ -132,7 +148,7 @@ def _contract_query(db: Session, where_sql: str = "", params: dict | None = None
             _select_expr("cu", customer_columns, "contact_person"),
             _select_expr("cu", customer_columns, "status", "customer_status"),
         ])
-        joins.append(f"LEFT JOIN customers cu ON cu.id = c.{contract_customer_col}")
+        joins.append(customer_join)
     else:
         select_parts.extend([
             "NULL AS tenant_slug",
@@ -169,7 +185,7 @@ def _contract_query(db: Session, where_sql: str = "", params: dict | None = None
     if contract_id_col in contract_columns:
         sql += f" ORDER BY c.{contract_id_col} DESC"
 
-    return text(sql), params or {}, contract_customer_col
+    return text(sql), params or {}, contract_customer_col, contract_user_col
 
 
 @router.get("/plans", response_model=List[schemas.PricingPlanResponse])
@@ -219,7 +235,7 @@ def get_all_contracts(
     db: Session = Depends(get_db),
     admin_user: models.User = Depends(utils.require_admin),
 ):
-    sql, params, _ = _contract_query(db)
+    sql, params, _, _ = _contract_query(db)
     rows = db.execute(sql, params).mappings().all()
     return [_contract_row_to_dict(row) for row in rows]
 
@@ -234,11 +250,15 @@ def get_customer_contracts(
     if role != "ADMIN" and current_user.customer_id != customer_id:
         raise HTTPException(status_code=403, detail="Bạn không được phép xem hợp đồng của khách hàng khác.")
 
-    _, _, contract_customer_col = _contract_query(db)
-    if not contract_customer_col:
+    _, _, contract_customer_col, contract_user_col = _contract_query(db)
+    if contract_customer_col:
+        where_sql = f"c.{contract_customer_col} = :customer_id"
+    elif contract_user_col:
+        where_sql = "u.customer_id = :customer_id"
+    else:
         return []
 
-    sql, params, _ = _contract_query(db, f"c.{contract_customer_col} = :customer_id", {"customer_id": customer_id})
+    sql, params, _, _ = _contract_query(db, where_sql, {"customer_id": customer_id})
     rows = db.execute(sql, params).mappings().all()
     return [_contract_row_to_dict(row) for row in rows]
 
@@ -250,25 +270,51 @@ def create_contract(
     admin_user: models.User = Depends(utils.require_admin),
 ):
     contract_columns = _columns(db, "contracts")
-    if "customer_id" not in contract_columns:
-        raise HTTPException(status_code=400, detail="Bảng contracts hiện không có cột customer_id; chưa thể tạo hợp đồng từ API này.")
+    if not contract_columns:
+        raise HTTPException(status_code=500, detail="Không tìm thấy bảng contracts trong database.")
 
-    if not db.query(models.Customer).filter(models.Customer.id == contract_in.customer_id).first():
-        raise HTTPException(status_code=404, detail="Không tìm thấy Khách hàng.")
+    user_id = None
+    if "customer_id" in contract_columns:
+        user_id = None
+    elif "user_id" in contract_columns:
+        user = db.query(models.User).filter(models.User.customer_id == contract_in.customer_id).first()
+        if not user:
+            raise HTTPException(status_code=400, detail="Không tìm thấy user liên kết với khách hàng này để tạo hợp đồng.")
+        user_id = user.id
+    else:
+        raise HTTPException(status_code=400, detail="Bảng contracts không có cột customer_id hoặc user_id.")
 
-    if contract_in.plan_id is not None:
-        if not db.query(models.PricingPlan).filter(models.PricingPlan.id == contract_in.plan_id).first():
-            raise HTTPException(status_code=404, detail="Không tìm thấy Gói cước.")
+    insert_values = {
+        "vm_netbox_id": contract_in.vm_netbox_id,
+        "plan_id": contract_in.plan_id,
+        "total_price": contract_in.total_price,
+        "start_date": contract_in.start_date,
+        "end_date": contract_in.end_date,
+        "status": contract_in.status.value if hasattr(contract_in.status, "value") else str(contract_in.status),
+    }
 
-    if contract_in.end_date <= contract_in.start_date:
-        raise HTTPException(status_code=400, detail="Ngày kết thúc phải sau Ngày bắt đầu.")
+    insert_columns = []
+    insert_params = []
 
-    contract = models.Contract(**contract_in.model_dump())
-    db.add(contract)
+    if "customer_id" in contract_columns:
+        insert_columns.append("customer_id")
+        insert_params.append(":customer_id")
+        insert_values["customer_id"] = contract_in.customer_id
+    if "user_id" in contract_columns:
+        insert_columns.append("user_id")
+        insert_params.append(":user_id")
+        insert_values["user_id"] = user_id
+
+    for col in ("vm_netbox_id", "plan_id", "total_price", "start_date", "end_date", "status"):
+        if col in contract_columns:
+            insert_columns.append(col)
+            insert_params.append(f":{col}")
+
+    db.execute(text(f"INSERT INTO contracts ({', '.join(insert_columns)}) VALUES ({', '.join(insert_params)})"), insert_values)
     db.commit()
-    db.refresh(contract)
+    contract_id = db.execute(text("SELECT LAST_INSERT_ID() AS id")).mappings().first()["id"]
 
-    sql, params, _ = _contract_query(db, "c.id = :contract_id", {"contract_id": contract.id})
+    sql, params, _, _ = _contract_query(db, "c.id = :contract_id", {"contract_id": contract_id})
     row = db.execute(sql, params).mappings().first()
     return _contract_row_to_dict(row)
 
@@ -294,6 +340,6 @@ def update_contract_status(
         raise HTTPException(status_code=404, detail="Không tìm thấy Hợp đồng.")
     db.commit()
 
-    sql, params, _ = _contract_query(db, f"c.{id_col} = :contract_id", {"contract_id": contract_id})
+    sql, params, _, _ = _contract_query(db, f"c.{id_col} = :contract_id", {"contract_id": contract_id})
     row = db.execute(sql, params).mappings().first()
     return _contract_row_to_dict(row)
