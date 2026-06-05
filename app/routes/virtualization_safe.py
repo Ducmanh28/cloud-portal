@@ -53,6 +53,7 @@ def _select_expr(alias: str, columns: set[str], column_name: str, output_name: s
 
 def _load_contract_map(db: Session):
     contract_columns = _columns(db, "contracts")
+    user_columns = _columns(db, "users")
     customer_columns = _columns(db, "customers")
     plan_columns = _columns(db, "pricing_plans")
 
@@ -73,6 +74,8 @@ def _load_contract_map(db: Session):
             customer_col = candidate
             break
 
+    user_col = "user_id" if "user_id" in contract_columns else None
+
     plan_col = None
     for candidate in ("plan_id", "pricing_plan_id", "pricing_id"):
         if candidate in contract_columns:
@@ -82,17 +85,26 @@ def _load_contract_map(db: Session):
     select_parts = [
         _select_expr("c", contract_columns, "id", "contract_id"),
         f"c.{vm_col} AS vm_netbox_id",
-        f"c.{customer_col} AS customer_id" if customer_col else "NULL AS customer_id",
+        f"c.{customer_col} AS customer_id" if customer_col else "u.customer_id AS customer_id" if user_col and "customer_id" in user_columns else "NULL AS customer_id",
         f"c.{plan_col} AS plan_id" if plan_col else "NULL AS plan_id",
     ]
 
     joins = []
+    if user_col and user_columns:
+        joins.append(f"LEFT JOIN users u ON u.id = c.{user_col}")
+
     if customer_col and customer_columns:
         select_parts.extend([
             _select_expr("cu", customer_columns, "company_name"),
             _select_expr("cu", customer_columns, "tenant_slug"),
         ])
         joins.append(f"LEFT JOIN customers cu ON cu.id = c.{customer_col}")
+    elif user_col and "customer_id" in user_columns and customer_columns:
+        select_parts.extend([
+            _select_expr("cu", customer_columns, "company_name"),
+            _select_expr("cu", customer_columns, "tenant_slug"),
+        ])
+        joins.append("LEFT JOIN customers cu ON cu.id = u.customer_id")
     else:
         select_parts.extend(["NULL AS company_name", "NULL AS tenant_slug"])
 
