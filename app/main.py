@@ -4,9 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import engine
 from . import models
-from .routes import system, auth, iam, business, virtualization, billing
-from .routes import dcim_safe as dcim
-from .routes import ipam_safe as ipam
+from .routes import system, auth, iam, business, virtualization, billing, dcim, ipam
 
 models.Base.metadata.create_all(bind=engine)
 
