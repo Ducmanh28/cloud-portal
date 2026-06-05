@@ -1,135 +1,158 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
 
-# Gộp chung các Import tương đối (Relative Imports) cho chuẩn kiến trúc
 from .. import models, utils
-from ..netbox_client import nb_client
 from ..database import get_db
-from .auth import get_current_user
+from ..netbox_client import nb_client
 
-# Khởi tạo Router
 router = APIRouter(prefix="/api/v1/dcim", tags=["DCIM (Physical Infrastructure)"])
 
-# ==========================================
-# 1. API: QUẢN LÝ SITES (DATA CENTERS)
-# ==========================================
+
+def _status(obj, default="Unknown"):
+    value = getattr(obj, "status", None)
+    return getattr(value, "value", default) if value else default
+
+
+def _name(obj, field, default="N/A"):
+    value = getattr(obj, field, None)
+    return getattr(value, "name", default) if value else default
+
+
+def _device_role_name(device):
+    role = getattr(device, "role", None) or getattr(device, "device_role", None)
+    return getattr(role, "name", "Unknown") if role else "Unknown"
+
+
+def _device_type_name(device):
+    device_type = getattr(device, "device_type", None)
+    return getattr(device_type, "model", "Unknown") if device_type else "Unknown"
+
+
+def _primary_ip(device):
+    ip = getattr(device, "primary_ip", None)
+    return getattr(ip, "address", "N/A") if ip else "N/A"
+
+
+def _customer_tenant_slug(db: Session, current_user: models.User):
+    if not current_user.customer_id:
+        return None
+    customer = db.query(models.Customer).filter(models.Customer.id == current_user.customer_id).first()
+    if not customer:
+        return None
+    return customer.tenant_slug
+
+
+def _map_device(device):
+    return {
+        "id": device.id,
+        "name": device.name,
+        "device_type": _device_type_name(device),
+        "device_role": _device_role_name(device),
+        "tenant": _name(device, "tenant", "None"),
+        "site": _name(device, "site", "Unknown"),
+        "rack": _name(device, "rack", "N/A"),
+        "position": getattr(device, "position", None),
+        "primary_ip": _primary_ip(device),
+        "status": _status(device),
+    }
+
+
 @router.get("/sites")
 def get_all_sites(admin_user: models.User = Depends(utils.require_admin)):
-    """[ADMIN] Lấy danh sách các Data Center / Site vật lý từ NetBox"""
     try:
         sites = nb_client.dcim.sites.all()
-        # Bắt buộc dùng getattr để tránh lỗi nếu trường đó rỗng (None) trong NetBox
-        results = [{"id": s.id, "name": s.name, "slug": s.slug, "status": s.status.value if getattr(s, 'status', None) else "Unknown", "facility": s.facility or "N/A"} for s in sites]
+        results = []
+        for site in sites:
+            results.append({
+                "id": site.id,
+                "name": site.name,
+                "slug": site.slug,
+                "status": _status(site),
+                "facility": getattr(site, "facility", None) or "N/A",
+            })
         return {"total": len(results), "sites": results}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi gọi NetBox API: {str(e)}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Lỗi gọi NetBox API: {str(exc)}")
 
-# ==========================================
-# 2. API: QUẢN LÝ RACKS (TỦ MẠNG)
-# ==========================================
+
 @router.get("/racks")
 def get_all_racks(site_slug: str = None, admin_user: models.User = Depends(utils.require_admin)):
-    """[ADMIN] Lấy danh sách Tủ Rack."""
     try:
         racks = nb_client.dcim.racks.filter(site=site_slug) if site_slug else nb_client.dcim.racks.all()
-        results = [{"id": r.id, "name": r.name, "site": r.site.name if getattr(r, 'site', None) else "N/A", "status": r.status.value if getattr(r, 'status', None) else "Unknown", "role": r.role.name if getattr(r, 'role', None) else "N/A", "u_height": r.u_height} for r in racks]
+        results = []
+        for rack in racks:
+            results.append({
+                "id": rack.id,
+                "name": rack.name,
+                "site": _name(rack, "site"),
+                "status": _status(rack),
+                "role": _name(rack, "role"),
+                "u_height": getattr(rack, "u_height", None),
+            })
         return {"total": len(results), "racks": results}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi gọi NetBox API: {str(e)}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Lỗi gọi NetBox API: {str(exc)}")
 
-# ==========================================
-# 3. API: QUẢN LÝ THIẾT BỊ VẬT LÝ (DEVICES)
-# ==========================================
+
 @router.get("/devices")
 def get_devices(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(utils.get_current_user),
 ):
-    """[ALL] Lấy danh sách thiết bị. Lọc theo Tenant nếu là User thường."""
-    user_role = current_user.role.name.upper() if current_user.role else "USER"
+    role = current_user.role.name.upper() if current_user.role else "USER"
     query_params = {}
-    
-    # Nếu là USER, thiết lập tham số lọc (query_params)
-    if user_role != "ADMIN":
-        if not current_user.customer_id:
+
+    if role != "ADMIN":
+        tenant_slug = _customer_tenant_slug(db, current_user)
+        if not tenant_slug:
             return {"devices": []}
-            
-        customer = db.query(models.Customer).filter(models.Customer.id == current_user.customer_id).first()
-        if not customer or not customer.tenant_slug:
-            return {"devices": []}
-            
-        query_params['tenant'] = customer.tenant_slug
+        query_params["tenant"] = tenant_slug
 
     try:
-        # Gọi trực tiếp pynetbox để lấy dữ liệu
-        devices_raw = nb_client.dcim.devices.filter(**query_params) if query_params else nb_client.dcim.devices.all()
-        
-        # MAPPING DỮ LIỆU: Bắt buộc để tránh lỗi Object Not JSON Serializable
-        results = []
-        for dev in devices_raw:
-            results.append({
-                "id": dev.id,
-                "name": dev.name,
-                "device_type": dev.device_type.model if getattr(dev, 'device_type', None) else "Unknown",
-                "device_role": dev.device_role.name if getattr(dev, 'device_role', None) else "Unknown",
-                "tenant": dev.tenant.name if getattr(dev, 'tenant', None) else "None",
-                "site": dev.site.name if getattr(dev, 'site', None) else "Unknown",
-                "rack": dev.rack.name if getattr(dev, 'rack', None) else "N/A",
-                "position": dev.position,
-                "primary_ip": dev.primary_ip.address if getattr(dev, 'primary_ip', None) else "N/A",
-                "status": dev.status.value if getattr(dev, 'status', None) else "Unknown"
-            })
-        return {"devices": results}
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Hệ thống lỗi khi truy xuất dữ liệu từ NetBox: {str(e)}"
-        )
+        devices = nb_client.dcim.devices.filter(**query_params) if query_params else nb_client.dcim.devices.all()
+        return {"devices": [_map_device(device) for device in devices]}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Hệ thống lỗi khi truy xuất dữ liệu từ NetBox: {str(exc)}")
 
-# ==========================================
-# 4. API: CHI TIẾT THIẾT BỊ VẬT LÝ
-# ==========================================
+
 @router.get("/devices/{device_id}")
 def get_device_details(
-    device_id: int, 
-    db: Session = Depends(get_db), 
-    current_user: models.User = Depends(get_current_user) # Đã sửa thành get_current_user thay vì require_admin
+    device_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(utils.get_current_user),
 ):
-    """[ALL] Lấy thông tin chi tiết thiết bị kèm interfaces. User chỉ xem được thiết bị của mình."""
     try:
-        dev = nb_client.dcim.devices.get(device_id)
-        if not dev:
+        device = nb_client.dcim.devices.get(device_id)
+        if not device:
             raise HTTPException(status_code=404, detail="Không tìm thấy thiết bị.")
 
-        # KIỂM TRA QUYỀN TRUY CẬP (BẢO MẬT)
-        user_role = current_user.role.name.upper() if current_user.role else "USER"
-        if user_role != "ADMIN":
-            customer = db.query(models.Customer).filter(models.Customer.id == current_user.customer_id).first()
-            if not customer or getattr(dev, 'tenant', None) is None or dev.tenant.slug != customer.tenant_slug:
-                raise HTTPException(status_code=403, detail="Cảnh báo an ninh: Không có quyền xem thiết bị này.")
+        role = current_user.role.name.upper() if current_user.role else "USER"
+        if role != "ADMIN":
+            tenant_slug = _customer_tenant_slug(db, current_user)
+            device_tenant = getattr(getattr(device, "tenant", None), "slug", None)
+            if not tenant_slug or device_tenant != tenant_slug:
+                raise HTTPException(status_code=403, detail="Không có quyền xem thiết bị này.")
 
-        # Lấy thông tin Interfaces (Cổng mạng)
         interfaces = nb_client.dcim.interfaces.filter(device_id=device_id)
-        if_list = [{"id": i.id, "name": i.name, "type": i.type.value if getattr(i, 'type', None) else "Unknown", "enabled": i.enabled, "mac_address": i.mac_address or "N/A"} for i in interfaces]
+        interface_list = []
+        for interface in interfaces:
+            interface_type = getattr(interface, "type", None)
+            interface_list.append({
+                "id": interface.id,
+                "name": interface.name,
+                "type": getattr(interface_type, "value", "Unknown") if interface_type else "Unknown",
+                "enabled": getattr(interface, "enabled", False),
+                "mac_address": getattr(interface, "mac_address", None) or "N/A",
+            })
 
-        # Trả về JSON đã được Mapping sạch sẽ
-        return {
-            "id": dev.id, 
-            "name": dev.name, 
-            "serial": dev.serial or "N/A", 
-            "device_type": dev.device_type.model if getattr(dev, 'device_type', None) else "Unknown",
-            "device_role": dev.device_role.name if getattr(dev, 'device_role', None) else "Unknown",
-            "site": dev.site.name if getattr(dev, 'site', None) else "Unknown",
-            "rack": dev.rack.name if getattr(dev, 'rack', None) else "N/A",
-            "position": dev.position,
-            "tenant": dev.tenant.name if getattr(dev, 'tenant', None) else "None",
-            "status": dev.status.value if getattr(dev, 'status', None) else "Unknown", 
-            "primary_ip": dev.primary_ip.address if getattr(dev, 'primary_ip', None) else "N/A",
-            "interfaces_count": len(if_list), 
-            "interfaces": if_list
-        }
+        result = _map_device(device)
+        result.update({
+            "serial": getattr(device, "serial", None) or "N/A",
+            "interfaces_count": len(interface_list),
+            "interfaces": interface_list,
+        })
+        return result
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi gọi NetBox API: {str(e)}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Lỗi gọi NetBox API: {str(exc)}")
